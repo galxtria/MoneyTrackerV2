@@ -13,6 +13,7 @@ import {
   PiggyBank,
   Plus,
   ReceiptText,
+  ScanLine,
   Search,
   Sparkles,
   Target,
@@ -25,6 +26,7 @@ import {
 import { Bar, BarChart, Cell, LabelList, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
+import ScanSheet from './components/ScanSheet'
 import { CATEGORIES, PAYMENTS, categoryById } from './lib/categories'
 import {
   db,
@@ -36,7 +38,7 @@ import {
   type Recurring,
   type SavingGoal,
 } from './lib/db'
-import { formatRp, formatRpShort, groupDigits, monthKey, parseAmount, todayStr } from './lib/format'
+import { formatRp, formatRpShort, groupDigits, monthKey, parseAmount, prettyDate, todayStr } from './lib/format'
 
 type Tab = 'home' | 'expenses' | 'stats' | 'goals'
 
@@ -80,6 +82,7 @@ export default function App() {
   const [budgetInput, setBudgetInput] = useState('')
   const [showBudgetEdit, setShowBudgetEdit] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [showScan, setShowScan] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   const now = new Date()
@@ -105,6 +108,8 @@ export default function App() {
   const [lastDeleted, setLastDeleted] = useState<Expense | null>(null)
   const [showUndo, setShowUndo] = useState(false)
   const undoTimer = useRef<number | null>(null)
+  // true kalau form diisi dari scan struk → habis simpan langsung tunjukkan datanya
+  const scanJustUsed = useRef(false)
 
   // budget per kategori editor
   const [editingCat, setEditingCat] = useState<string | null>(null)
@@ -312,6 +317,23 @@ export default function App() {
     [byCategory],
   )
 
+  // Riwayat dikelompokkan per tanggal (urutan ikut sort aktif) + total harian
+  // Dibatasi 150 terbaru biar swipe tetap mulus di iPhone
+  const HISTORY_LIMIT = 150
+  const historyGroups = useMemo(() => {
+    const map = new Map<string, { items: Expense[]; total: number }>()
+    for (const e of history.slice(0, HISTORY_LIMIT)) {
+      let g = map.get(e.date)
+      if (!g) {
+        g = { items: [], total: 0 }
+        map.set(e.date, g)
+      }
+      g.items.push(e)
+      g.total += e.amount
+    }
+    return [...map.entries()].map(([date, g]) => ({ date, ...g }))
+  }, [history])
+
   async function saveBudget() {
     const v = parseAmount(budgetInput)
     if (v <= 0) return
@@ -345,19 +367,32 @@ export default function App() {
       alert('Isi nominal dulu, contoh 25000')
       return
     }
-    if (editingExpense?.id) {
-      await db.expenses.update(editingExpense.id, {
-        amount,
-        categoryId: catId,
-        payment,
-        date,
-        note: note.trim(),
-      })
-    } else {
-      await db.expenses.add({ amount, categoryId: catId, payment, date, note: note.trim(), createdAt: Date.now() })
+    try {
+      if (editingExpense?.id) {
+        await db.expenses.update(editingExpense.id, {
+          amount,
+          categoryId: catId,
+          payment,
+          date,
+          note: note.trim(),
+        })
+      } else {
+        await db.expenses.add({ amount, categoryId: catId, payment, date, note: note.trim(), createdAt: Date.now() })
+      }
+    } catch (err) {
+      alert('Gagal menyimpan. Coba lagi. (' + (err instanceof Error ? err.message : String(err)) + ')')
+      return
     }
+    const savedMonth = date.slice(0, 7)
     closeAdd()
     await refresh()
+    // Habis scan: pindah ke bulan struk + buka Riwayat biar datanya kelihatan
+    if (scanJustUsed.current) {
+      scanJustUsed.current = false
+      setViewMonth(savedMonth)
+      setSelectedDay(undefined)
+      setTab('expenses')
+    }
   }
 
   async function duplicateExpense() {
@@ -676,28 +711,43 @@ export default function App() {
             {/* Week strip ala mockup */}
             <section className="bg-white rounded-3xl p-3 border border-blue-100 shadow-sm">
               <div className="grid grid-cols-7 gap-1 text-center">
-                {weekStrip.map((d) => (
-                  <button key={d.iso} onClick={() => setSelectedDay((p) => (p === d.iso ? undefined : d.iso))} className={`rounded-2xl py-2 ${selectedDay === d.iso ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>
-                    <p className="text-[10px] opacity-70">{d.wd}</p>
-                    <p className="text-sm font-bold">{d.num}</p>
-                    <span className={`block w-1 h-1 rounded-full mx-auto mt-1 ${d.total > 0 ? (selectedDay === d.iso ? 'bg-white' : 'bg-blue-500') : 'bg-transparent'}`} />
-                  </button>
-                ))}
+                {weekStrip.map((d) => {
+                  const active = selectedDay === d.iso
+                  return (
+                    <button
+                      key={d.iso}
+                      onClick={() => setSelectedDay((p) => (p === d.iso ? undefined : d.iso))}
+                      className={`rounded-2xl py-2 transition ${active ? 'bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-200' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <p className={`text-[10px] ${active ? 'text-blue-100' : 'text-slate-400'}`}>{d.wd}</p>
+                      <p className="text-sm font-bold">{d.num}</p>
+                      <span className={`block w-1 h-1 rounded-full mx-auto mt-1 ${d.total > 0 ? (active ? 'bg-white' : 'bg-blue-500') : 'bg-transparent'}`} />
+                    </button>
+                  )
+                })}
               </div>
               {selectedDay && <button onClick={() => setSelectedDay(undefined)} className="mt-2 text-[11px] font-semibold text-blue-700 bg-blue-50 rounded-full px-3 py-1.5">Filter {selectedDay} — tap buat clear</button>}
             </section>
 
             {/* Dua kartu ringkas */}
             <section className="grid grid-cols-2 gap-3">
-              <div className="bg-blue-600 text-white rounded-3xl p-4 shadow">
-                <p className="text-[11px] text-blue-100">Budget</p>
-                <p className="font-extrabold">{formatRp(budget)}</p>
-                <Wallet size={18} className="mt-2 opacity-70" />
+              <div className="relative overflow-hidden bg-blue-600 text-white rounded-3xl p-4 shadow shadow-blue-100">
+                <div className="pointer-events-none absolute -top-10 -right-10 w-28 h-28 rounded-full bg-white/10" />
+                <div className="relative">
+                  <p className="text-[11px] text-blue-100">Total Expense</p>
+                  <p className="font-extrabold text-lg leading-tight">{formatRp(totalViewed)}</p>
+                  <p className="text-[10px] text-blue-200 mt-0.5">{viewed.length} transaksi</p>
+                </div>
               </div>
               <div className="bg-white text-slate-900 rounded-3xl p-4 shadow-sm border border-blue-100">
-                <p className="text-[11px] text-slate-400">Total Expense</p>
-                <p className="font-extrabold text-blue-700">{formatRp(totalViewed)}</p>
-                <ReceiptText size={18} className="mt-2 text-blue-300" />
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] text-slate-400">Budget</p>
+                  <p className="text-[11px] font-bold text-blue-700">{budget > 0 ? Math.min(100, Math.round((totalViewed / budget) * 100)) : 0}%</p>
+                </div>
+                <p className="font-extrabold">{formatRp(budget)}</p>
+                <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                  <div className="h-full bg-blue-600 rounded-full" style={{ width: `${budget > 0 ? Math.min(100, (totalViewed / budget) * 100) : 0}%` }} />
+                </div>
               </div>
             </section>
 
@@ -730,14 +780,27 @@ export default function App() {
               </div>
             </section>
 
-            <div className="space-y-2">
-              {history.slice(0, 100).map((e) => (
-                <ExpenseRow key={e.id} e={e} onTap={openEdit} onDelete={requestDelete} />
+            <div className="space-y-4">
+              {historyGroups.map((g) => (
+                <div key={g.date}>
+                  <div className="flex items-center justify-between px-1 mb-1.5">
+                    <p className="text-xs font-bold text-slate-500 capitalize">{prettyDate(g.date)}</p>
+                    <p className="text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-2.5 py-0.5">{formatRp(g.total)}</p>
+                  </div>
+                  <div className="space-y-2">
+                    {g.items.map((e) => (
+                      <ExpenseRow key={e.id} e={e} onTap={openEdit} onDelete={requestDelete} />
+                    ))}
+                  </div>
+                </div>
               ))}
               {history.length === 0 && (
-                <div className="bg-white rounded-3xl border border-blue-100 shadow-sm">
+                <div className="bg-white rounded-3xl border border-dashed border-blue-200 shadow-sm">
                   <p className="text-center text-xs text-slate-400 py-8">Nggak ketemu. Ubah kata kunci / filter.</p>
                 </div>
+              )}
+              {history.length > HISTORY_LIMIT && (
+                <p className="text-center text-[11px] text-slate-400">Menampilkan {HISTORY_LIMIT} terbaru — persempit lewat filter/bulan.</p>
               )}
             </div>
           </div>
@@ -926,6 +989,23 @@ export default function App() {
         )}
       </main>
 
+      {showScan && (
+        <ScanSheet
+          onClose={() => setShowScan(false)}
+          onUse={(d) => {
+            const dt = d.date || todayStr()
+            setAmountRaw(groupDigits(String(d.amount)))
+            setCatId(d.categoryId)
+            setDate(dt)
+            setNote(d.note)
+            setViewMonth(dt.slice(0, 7))
+            setSelectedDay(undefined)
+            scanJustUsed.current = true
+            setShowScan(false)
+          }}
+        />
+      )}
+
       {/* Toast urungkan hapus */}
       {showUndo && (
         <div className="fixed bottom-24 inset-x-0 z-30 flex justify-center px-6">
@@ -983,8 +1063,17 @@ export default function App() {
         <div className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center" onClick={closeAdd}>
           <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
-            <p className="font-bold text-lg text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
-            <p className="text-xs text-slate-400 mb-3">{editingExpense ? 'Betulkan yang salah, lalu simpan.' : 'Nominal, kategori, simpan.'}</p>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-bold text-lg text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
+                <p className="text-xs text-slate-400 mb-3">{editingExpense ? 'Betulkan yang salah, lalu simpan.' : 'Nominal, kategori, simpan.'}</p>
+              </div>
+              {!editingExpense && (
+                <button onClick={() => setShowScan(true)} className="shrink-0 text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-3 py-2 flex items-center gap-1.5">
+                  <ScanLine size={15} /> Scan struk
+                </button>
+              )}
+            </div>
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
             <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} className="w-full text-3xl font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-3 mt-1 mb-2 outline-none focus:border-blue-500 bg-transparent" />
             <div className="flex gap-2 mb-3 flex-wrap">

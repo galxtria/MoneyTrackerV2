@@ -50,6 +50,23 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: { cacheName: 'fonts' },
           },
+          // Mesin + data bahasa OCR (diunduh sekali saat pertama scan, lalu offline)
+          {
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ocr-cdn',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/tessdata\.projectnaptha\.com\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ocr-data',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 90 },
+            },
+          },
         ],
       },
     }),
