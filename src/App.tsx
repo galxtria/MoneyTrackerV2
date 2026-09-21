@@ -75,6 +75,13 @@ function mondayOf(iso: string): Date {
   return dt
 }
 
+// "2026-09-21" -> "21 Sep 2026" buat tampilan field tanggal custom
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('home')
   const [all, setAll] = useState<Expense[]>([])
@@ -1626,7 +1633,22 @@ export default function App() {
 
             <div className="mt-2.5">
               <label className="text-[11px] font-semibold text-slate-400">TANGGAL</label>
-              <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} className="w-full block mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm text-slate-900" />
+              <div className="relative mt-1 rounded-2xl border border-slate-200 overflow-hidden focus-within:border-blue-500">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <CalendarDays size={16} className="text-slate-400 shrink-0" />
+                  <span className="text-sm text-slate-900 truncate">{shortDate(date)}</span>
+                </div>
+                {/* Input tanggal asli dibuat transparan di atas: tap → picker iOS asli kebuka,
+                    tapi yang kelihatan cuma tampilan custom yang tidak mungkin overflow */}
+                <input
+                  type="date"
+                  aria-label="Tanggal"
+                  value={date}
+                  max={todayStr()}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+              </div>
             </div>
             <div className="mt-2.5">
               <label className="text-[11px] font-semibold text-slate-400">CATATAN</label>
