@@ -25,3 +25,22 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Splash screen */
+@keyframes splash-pop {
+  0% { transform: scale(0.55); opacity: 0; }
+  60% { transform: scale(1.07); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes splash-rise {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes splash-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(14px, -12px); }
+}
+.anim-pop { animation: splash-pop 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.anim-rise { animation: splash-rise 0.55s ease-out both; }
+.anim-drift { animation: splash-drift 5s ease-in-out infinite; }
+.anim-home-in { animation: splash-rise 0.45s ease-out both; }

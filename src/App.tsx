@@ -86,7 +86,8 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
   const [loaded, setLoaded] = useState(false)
-  const [splash, setSplash] = useState(true)
+  const [splashPhase, setSplashPhase] = useState<'show' | 'leaving' | 'gone'>('show')
+  const splashT0 = useRef(Date.now())
 
   const now = new Date()
   const mkNow = monthKey(now)
@@ -165,10 +166,17 @@ export default function App() {
     refresh().finally(() => setLoaded(true))
   }, [])
 
+  // Splash keluar smooth: tunggu data siap + minimal tampil 1,1 dtk, lalu fade 0,5 dtk
   useEffect(() => {
-    const t = window.setTimeout(() => setSplash(false), 1200)
-    return () => window.clearTimeout(t)
-  }, [])
+    if (!loaded) return
+    const wait = Math.max(0, 1100 - (Date.now() - splashT0.current))
+    const t1 = window.setTimeout(() => setSplashPhase('leaving'), wait)
+    const t2 = window.setTimeout(() => setSplashPhase('gone'), wait + 500)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [loaded])
 
   const homeExpenses = useMemo(() => all.filter((e) => e.date.startsWith(mkNow)), [all, mkNow])
   const viewed = useMemo(() => all.filter((e) => e.date.startsWith(viewMonth)), [all, viewMonth])
@@ -709,13 +717,21 @@ export default function App() {
   return (
     <div className="min-h-dvh max-w-md mx-auto bg-slate-100 flex flex-col">
       {/* Splash screen */}
-      {splash && (
-        <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex flex-col items-center justify-center gap-3">
-          <div className="pointer-events-none absolute top-1/4 left-1/4 w-56 h-56 rounded-full bg-white/10" />
+      {splashPhase !== 'gone' && (
+        <div
+          className={`fixed inset-0 z-50 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex flex-col items-center justify-center gap-3 transition-opacity duration-500 ${
+            splashPhase === 'leaving' ? 'opacity-0' : 'opacity-100'
+          }`}
+        >
+          <div className="pointer-events-none absolute top-1/4 left-1/4 w-56 h-56 rounded-full bg-white/10 anim-drift" />
           <div className="pointer-events-none absolute bottom-1/4 right-1/4 w-40 h-40 rounded-full bg-blue-300/20" />
-          <img src="/logo.svg" alt="MoneyTracker" className="relative w-20 h-20 rounded-[22px] shadow-2xl" />
-          <p className="relative font-extrabold text-xl text-white tracking-tight">MoneyTracker</p>
-          <p className="relative text-xs text-blue-200">Catat pengeluaran dalam 5 detik</p>
+          <img src="/logo.svg" alt="MoneyTracker" className="relative w-20 h-20 rounded-[22px] shadow-2xl anim-pop" />
+          <p className="relative font-extrabold text-xl text-white tracking-tight anim-rise" style={{ animationDelay: '0.25s' }}>
+            MoneyTracker
+          </p>
+          <p className="relative text-xs text-blue-200 anim-rise" style={{ animationDelay: '0.45s' }}>
+            Catat pengeluaran dalam 5 detik
+          </p>
         </div>
       )}
       {/* Header ala mockup */}
@@ -728,7 +744,7 @@ export default function App() {
         </span>
       </header>
 
-      <main className="flex-1 px-5 py-3 pb-32">
+      <main className={`flex-1 px-5 py-3 pb-32 ${splashPhase === 'show' ? 'opacity-0' : 'anim-home-in'}`}>
         {tab === 'home' && (
           <div className="space-y-4">
             {/* Hero card */}
