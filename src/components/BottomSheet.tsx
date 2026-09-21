@@ -7,6 +7,9 @@ interface Props {
   footer?: ReactNode
   maxHeight?: string
   zIndex?: string
+  /** true = form fixed ala app profesional: tidak bisa scroll vertikal,
+      tidak ikut menyusut saat keyboard naik (keyboard meng-overlay). */
+  fixed?: boolean
 }
 
 const DISMISS_Y = 90
@@ -15,9 +18,11 @@ const DISMISS_Y = 90
 // - cuma garis handle yang bisa di-swipe buat nutup (form tidak ikut kegeser)
 // - TIDAK ada setState per-frame saat drag → DOM dimutasi langsung, no re-render
 // - tanpa backdrop-blur (biang frame drop di iPhone) → putih solid
-// - konten scroll native, overscroll dimatikan biar tidak ada gap karet
-// - sheet menyusut mengikuti keyboard via visualViewport → footer tetap di atas keyboard
-export default function BottomSheet({ onClose, header, children, footer, maxHeight = '92dvh', zIndex = 'z-30' }: Props) {
+// - mode fixed (form Tambah/Edit): konten DIKUNCI tidak bisa scroll vertikal,
+//   sheet tidak menyusut saat keyboard naik → tidak ada momen "kepotong" aneh.
+//   Keyboard TIDAK dibuka otomatis; user tap field sendiri (tap ✓ buat nutup).
+// - mode scroll (Scan/Confirm): konten scroll native, sheet menyusut ikut keyboard.
+export default function BottomSheet({ onClose, header, children, footer, maxHeight = '92dvh', zIndex = 'z-30', fixed = false }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<HTMLDivElement>(null)
@@ -47,7 +52,8 @@ export default function BottomSheet({ onClose, header, children, footer, maxHeig
     window.setTimeout(() => closeRef.current(), 200)
   }, [])
 
-  // Masuk sekali, tanpa animasi berat
+  // Masuk sekali, tanpa animasi berat.
+  // Sengaja TIDAK autofocus: keyboard jangan kebuka sendiri (user tap field).
   useEffect(() => {
     const sheet = sheetRef.current
     const backdrop = backdropRef.current
@@ -70,20 +76,15 @@ export default function BottomSheet({ onClose, header, children, footer, maxHeig
           backdrop.style.opacity = '0.4'
         }
         setEntered(true)
-        // Fokus input utama TANPA scroll jump (keyboard naik, form diam)
-        const auto = sheet?.querySelector<HTMLElement>('[data-autofocus]')
-        try {
-          auto?.focus({ preventScroll: true } as FocusOptions)
-        } catch {
-          auto?.focus()
-        }
       }),
     )
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  // Keyboard HP: susutkan sheet biar footer tetap di atas keyboard, form tidak ke-scroll paksa
+  // Keyboard HP (mode scroll saja): susutkan sheet biar footer tetap di atas keyboard.
+  // Mode fixed dilewati: sheet diam, keyboard meng-overlay → form tidak kepotong/scroll paksa.
   useEffect(() => {
+    if (fixed) return
     const sheet = sheetRef.current
     if (!sheet) return
     const vv = window.visualViewport
@@ -96,7 +97,7 @@ export default function BottomSheet({ onClose, header, children, footer, maxHeig
     sync()
     vv.addEventListener('resize', sync)
     return () => vv.removeEventListener('resize', sync)
-  }, [])
+  }, [fixed])
 
   // ESC (desktop)
   useEffect(() => {
@@ -196,8 +197,14 @@ export default function BottomSheet({ onClose, header, children, footer, maxHeig
         </div>
         <div className="shrink-0 bg-white border-b border-slate-100 px-5 pb-3">{header}</div>
 
-        {/* KONTEN: scroll native, tidak pernah menggeser sheet */}
-        <div className="bottom-sheet-scroll flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {/* KONTEN fixed: dikunci, tidak bisa scroll vertikal (chip horizontal tetap bisa geser).
+            Mode scroll: scroll native, tidak pernah menggeser sheet. */}
+        <div
+          className={fixed ? 'shrink-0 overflow-hidden px-5 py-3' : 'bottom-sheet-scroll flex-1 overflow-y-auto px-5 py-4'}
+          style={fixed ? { touchAction: 'pan-x', overscrollBehavior: 'none' } : undefined}
+        >
+          {children}
+        </div>
 
         {/* FOOTER: sticky */}
         {footer && (

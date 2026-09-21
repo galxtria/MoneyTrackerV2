@@ -1559,6 +1559,7 @@ export default function App() {
       {showAdd && (
         <BottomSheet
           onClose={closeAdd}
+          fixed
           header={
             <div className="flex items-center justify-between gap-2">
               <p className="font-bold text-[17px] text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
@@ -1586,63 +1587,66 @@ export default function App() {
           }
         >
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
-            <div className="relative mt-1 mb-1">
+            <div className="relative mt-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Rp</span>
               <input
-                data-autofocus
                 inputMode="numeric"
                 enterKeyHint="done"
                 autoComplete="off"
                 placeholder="0"
                 value={amountRaw}
                 onChange={(e) => setAmountRaw(groupDigits(e.target.value))}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-3 text-2xl font-extrabold text-slate-900 outline-none focus:border-blue-500 focus:bg-white placeholder:text-slate-300"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 py-2.5 text-xl font-extrabold text-slate-900 outline-none focus:border-blue-500 focus:bg-white placeholder:text-slate-300"
               />
             </div>
-            {amountRaw && parseAmount(amountRaw) > 0 && (
-              <p className="text-xs text-slate-400 mb-3">= {formatRp(parseAmount(amountRaw))}</p>
-            )}
-            {!amountRaw && <div className="mb-3" />}
+            {amountRaw && parseAmount(amountRaw) > 0 ? (
+              <p className="text-xs text-slate-400 mt-1">= {formatRp(parseAmount(amountRaw))}</p>
+            ) : null}
 
-            <label className="text-[11px] font-semibold text-slate-400">KATEGORI</label>
-            <div className="grid grid-cols-4 gap-2 mt-1.5 mb-4">
+            <label className="block text-[11px] font-semibold text-slate-400 mt-2.5">KATEGORI</label>
+            <div className="flex gap-1.5 overflow-x-auto mt-1.5 -mx-5 px-5 pb-0.5" style={{ touchAction: 'pan-x' }}>
               {cats.map((c) => {
                 const CI = c.Icon
                 const active = catId === c.id
                 return (
-                  <button key={c.id} onClick={() => setCatId(c.id)} className={`rounded-2xl border py-2.5 text-center ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
-                    <CI size={19} className="mx-auto" style={{ color: c.color }} />
-                    <div className="text-[10px] font-semibold leading-tight mt-1 text-slate-600 truncate px-1">{c.name}</div>
+                  <button key={c.id} onClick={() => setCatId(c.id)} className={`shrink-0 rounded-2xl border px-3 py-2 flex items-center gap-1.5 ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                    <CI size={16} style={{ color: c.color }} />
+                    <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap">{c.name}</span>
                   </button>
                 )
               })}
             </div>
 
-            <label className="text-[11px] font-semibold text-slate-400">BAYAR PAKAI</label>
-            <div className="flex flex-wrap gap-1.5 mt-1.5 mb-4">
+            <label className="block text-[11px] font-semibold text-slate-400 mt-2.5">BAYAR PAKAI</label>
+            <div className="flex gap-1.5 overflow-x-auto mt-1.5 -mx-5 px-5 pb-0.5" style={{ touchAction: 'pan-x' }}>
               {PAYMENTS.map((p) => (
-                <button key={p} onClick={() => setPayment(p)} className={`text-xs rounded-full px-3.5 py-2 border font-semibold ${payment === p ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-500'}`}>{p}</button>
+                <button key={p} onClick={() => setPayment(p)} className={`shrink-0 text-xs rounded-full px-3.5 py-2 border font-semibold ${payment === p ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-500'}`}>{p}</button>
               ))}
             </div>
 
-            <label className="text-[11px] font-semibold text-slate-400">TANGGAL</label>
-            <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} className="w-full mt-1.5 mb-4 border border-slate-200 rounded-2xl px-3 py-2.5 bg-transparent text-sm" />
-
-            <label className="text-[11px] font-semibold text-slate-400">CATATAN <span className="font-normal">(opsional)</span></label>
-            <input placeholder="Contoh: bakso" value={note} onChange={(e) => setNote(e.target.value)} enterKeyHint="done" className="w-full mt-1.5 mb-3 border border-slate-200 rounded-2xl px-3 py-2.5 bg-transparent text-sm outline-none focus:border-blue-500" />
+            <div className="grid grid-cols-2 gap-2 mt-2.5">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400">TANGGAL</label>
+                <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} className="w-full mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm" />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400">CATATAN</label>
+                <input placeholder="bakso" value={note} onChange={(e) => setNote(e.target.value)} enterKeyHint="done" className="w-full mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm outline-none focus:border-blue-500" />
+              </div>
+            </div>
 
             <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = '' }} />
             {photo ? (
-              <div className="flex items-center gap-2 mb-1 bg-slate-50 border border-slate-200 rounded-2xl p-1.5">
-                <img src={photo} alt="Bukti" className="w-12 h-12 object-cover rounded-xl shrink-0" />
+              <div className="flex items-center gap-2 mt-2.5 bg-slate-50 border border-slate-200 rounded-2xl p-1.5">
+                <img src={photo} alt="Bukti" className="w-10 h-10 object-cover rounded-xl shrink-0" />
                 <p className="flex-1 text-xs font-semibold text-slate-600">Foto struk terlampir</p>
                 <button onClick={() => setPhoto(undefined)} className="text-[11px] font-bold text-red-600 bg-red-50 rounded-full px-3 py-1.5 shrink-0">
                   Hapus
                 </button>
               </div>
             ) : (
-              <button onClick={() => photoRef.current?.click()} className="w-full text-slate-400 text-sm font-medium rounded-2xl py-2.5 flex items-center justify-center gap-1.5">
-                <Camera size={15} /> Tambah foto (opsional)
+              <button onClick={() => photoRef.current?.click()} className="w-full mt-2 text-slate-400 text-[13px] font-medium rounded-2xl py-1.5 flex items-center justify-center gap-1.5">
+                <Camera size={14} /> Tambah foto (opsional)
               </button>
             )}
         </BottomSheet>
