@@ -296,7 +296,7 @@ export default function App() {
   const [statYear, setStatYear] = useState(now.getFullYear())
   const yearData = useMemo(() => {
     const arr = Array.from({ length: 12 }, (_, i) => ({
-      label: new Date(statYear, i, 1).toLocaleDateString('id-ID', { month: 'short' }),
+      label: new Date(statYear, i, 1).toLocaleDateString('id-ID', { month: 'long' }),
       total: 0,
       current: statYear === now.getFullYear() && i === now.getMonth(),
     }))
@@ -397,7 +397,7 @@ export default function App() {
       const d = new Date(mon)
       d.setDate(mon.getDate() + i)
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      return { iso, num: d.getDate(), wd: d.toLocaleDateString('id-ID', { weekday: 'narrow' }), total: viewedDaily[iso] ?? all.filter((e) => e.date === iso).reduce((s, e) => s + e.amount, 0) }
+      return { iso, num: d.getDate(), wd: d.toLocaleDateString('id-ID', { weekday: 'long' }), total: viewedDaily[iso] ?? all.filter((e) => e.date === iso).reduce((s, e) => s + e.amount, 0) }
     })
   }, [selectedDay, viewedDaily, all])
 
@@ -738,9 +738,9 @@ export default function App() {
       <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pt-3 pb-2 flex items-center gap-2.5">
         <img src="/logo.svg" alt="Logo MoneyTracker" className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
         <p className="flex-1 font-bold text-[15px] text-slate-900 truncate">MoneyTracker</p>
-        <span className="text-[11px] font-bold text-blue-700 bg-white border border-blue-100 rounded-full pl-2 pr-2.5 py-1 capitalize shrink-0 flex items-center gap-1">
-          <CalendarDays size={12} />
-          {new Date(vy, vm - 1, 1).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
+        <span className="text-[11px] font-bold text-blue-700 bg-white border border-blue-100 rounded-full pl-2 pr-2.5 py-1 capitalize shrink-0 flex items-center gap-1 max-w-[150px] truncate">
+          <CalendarDays size={12} className="shrink-0" />
+          {new Date(vy, vm - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
         </span>
       </header>
 
@@ -826,7 +826,7 @@ export default function App() {
               <div className="bg-blue-600 text-white rounded-3xl p-4 shadow shadow-blue-100">
                 <p className="text-[11px] text-blue-100">Keluar Hari Ini</p>
                 <p className="font-extrabold text-lg leading-tight">{formatRp(totalToday)}</p>
-                <p className="text-[10px] text-blue-200 mt-0.5">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+                <p className="text-[10px] text-blue-200 mt-0.5">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
               </div>
               <div className="bg-white text-slate-900 rounded-3xl p-4 shadow-sm border border-blue-100">
                 <p className="text-[11px] text-slate-500">Keluar Bulan Ini</p>
@@ -922,7 +922,7 @@ export default function App() {
                       onClick={() => setSelectedDay((p) => (p === d.iso ? undefined : d.iso))}
                       className={`rounded-2xl py-2 transition ${active ? 'bg-gradient-to-b from-blue-500 to-blue-700 text-white shadow-md shadow-blue-200' : 'text-slate-600 hover:bg-slate-50'}`}
                     >
-                      <p className={`text-[10px] ${active ? 'text-blue-100' : 'text-slate-400'}`}>{d.wd}</p>
+                      <p className={`text-[9px] truncate ${active ? 'text-blue-100' : 'text-slate-400'}`}>{d.wd}</p>
                       <p className="text-sm font-bold">{d.num}</p>
                       <span className={`block w-1 h-1 rounded-full mx-auto mt-1 ${d.total > 0 ? (active ? 'bg-white' : 'bg-blue-500') : 'bg-transparent'}`} />
                     </button>

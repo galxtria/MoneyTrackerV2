@@ -39,7 +39,7 @@ export default function Heatmap({ dailyTotals, year, month, selected, onSelect }
         <p className="text-[11px] text-slate-500">Biru tua = boros • max {formatRp(cells.max)}</p>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400 mb-1">
-        {['Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb', 'Mg'].map((d) => (
+        {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((d) => (
           <div key={d}>{d}</div>
         ))}
       </div>

@@ -21,7 +21,7 @@ export function monthKey(d = new Date()): string {
 export function prettyDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
-  return dt.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
+  return dt.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
 export function parseAmount(raw: string): number {

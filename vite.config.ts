@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
+      includeAssets: ['logo.svg', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
         name: 'MoneyTracker - Catat Pengeluaran',
         short_name: 'MoneyTracker',

@@ -34,7 +34,7 @@ export default function YearChart({ year, data, onPick }: Props) {
           if (i !== undefined && i !== null && onPick) onPick(Number(i))
         }}
       >
-        <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tick={{ fill: '#94a3b8' }} interval={0} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={10} tick={{ fill: '#94a3b8' }} interval={0} tickFormatter={(v) => String(v).slice(0, 3)} />
         <Tooltip formatter={(v) => formatRp(Number(v))} cursor={{ fill: '#eff6ff' }} />
         <Bar dataKey="total" radius={[5, 5, 2, 2]}>
           {data.map((d, i) => (
