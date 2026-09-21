@@ -88,18 +88,22 @@ button:active { transform: scale(0.96); }
   overscroll-behavior: contain;
 }
 
-/* Bottom sheet rasa native */
+/* Bottom sheet: kunci rubber-band (gap karet) + scroll native yang murah di GPU */
 .bottom-sheet-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
+  overscroll-behavior: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 .bottom-sheet-scroll::-webkit-scrollbar {
   display: none;
 }
 
-/* HP berasa app beneran: cegah pull-to-refresh & teks ke-select saat drag */
+/* HP berasa app beneran: cegah pull-to-refresh & teks ke-select saat drag.
+   Sheet tidak pakai blur sama sekali (biang frame drop di iPhone). */
 [role="dialog"] {
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
 }

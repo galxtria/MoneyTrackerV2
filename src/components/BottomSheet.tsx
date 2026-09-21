@@ -5,59 +5,100 @@ interface Props {
   header: ReactNode
   children: ReactNode
   footer?: ReactNode
-  /** tinggi sheet, default 92dvh */
   maxHeight?: string
   zIndex?: string
 }
 
-const DISMISS_Y = 110
-const DISMISS_VELOCITY = 0.45 // px per ms
+const DISMISS_Y = 90
 
-// Bottom sheet rasa aplikasi mobile beneran:
-// - header + footer selalu nempel (sticky), cuma konten tengah yang scroll
-// - garis atas (handle) bisa di-drag / swipe ke bawah buat nutup
-// - konten yang lagi di posisi paling atas juga bisa di-swipe ke bawah buat nutup
-// - backdrop tap + tombol ESC juga nutup, semua pakai animasi keluar dulu
+// Bottom sheet ringan buat HP kentang:
+// - cuma garis handle yang bisa di-swipe buat nutup (form tidak ikut kegeser)
+// - TIDAK ada setState per-frame saat drag → DOM dimutasi langsung, no re-render
+// - tanpa backdrop-blur (biang frame drop di iPhone) → putih solid
+// - konten scroll native, overscroll dimatikan biar tidak ada gap karet
+// - sheet menyusut mengikuti keyboard via visualViewport → footer tetap di atas keyboard
 export default function BottomSheet({ onClose, header, children, footer, maxHeight = '92dvh', zIndex = 'z-30' }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [dragY, setDragY] = useState(0)
-  const [dragging, setDragging] = useState(false)
+  const backdropRef = useRef<HTMLDivElement>(null)
+  const handleRef = useRef<HTMLDivElement>(null)
   const [entered, setEntered] = useState(false)
   const [leaving, setLeaving] = useState(false)
-
-  const drag = useRef<{
-    startY: number
-    lastY: number
-    lastT: number
-    velocity: number
-    mode: 'handle' | 'content' | null
-  }>({ startY: 0, lastY: 0, lastT: 0, velocity: 0, mode: null })
 
   const closeRef = useRef(onClose)
   closeRef.current = onClose
   const leavingRef = useRef(false)
-
-  // Masuk: dari bawah meluncur ke atas
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setEntered(true)))
-    return () => cancelAnimationFrame(raf)
-  }, [])
+  const dragRef = useRef({ active: false, startY: 0, dy: 0, lastY: 0, lastT: 0, velocity: 0 })
+  const rafRef = useRef(0)
 
   const animateOut = useCallback(() => {
     if (leavingRef.current) return
     leavingRef.current = true
     setLeaving(true)
-    setDragging(false)
-    try {
-      navigator.vibrate?.(8)
-    } catch {
-      /* abaikan */
+    const sheet = sheetRef.current
+    const backdrop = backdropRef.current
+    if (sheet) {
+      sheet.style.transition = 'transform 0.2s ease-out'
+      sheet.style.transform = 'translateY(100%)'
     }
-    window.setTimeout(() => closeRef.current(), 240)
+    if (backdrop) {
+      backdrop.style.transition = 'opacity 0.2s ease-out'
+      backdrop.style.opacity = '0'
+    }
+    window.setTimeout(() => closeRef.current(), 200)
   }, [])
 
-  // ESC buat nutup (pengguna desktop)
+  // Masuk sekali, tanpa animasi berat
+  useEffect(() => {
+    const sheet = sheetRef.current
+    const backdrop = backdropRef.current
+    if (sheet) {
+      sheet.style.transform = 'translateY(100%)'
+      sheet.style.transition = 'none'
+    }
+    if (backdrop) {
+      backdrop.style.opacity = '0'
+      backdrop.style.transition = 'none'
+    }
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (sheet) {
+          sheet.style.transition = 'transform 0.22s ease-out'
+          sheet.style.transform = 'translateY(0)'
+        }
+        if (backdrop) {
+          backdrop.style.transition = 'opacity 0.22s ease-out'
+          backdrop.style.opacity = '0.4'
+        }
+        setEntered(true)
+        // Fokus input utama TANPA scroll jump (keyboard naik, form diam)
+        const auto = sheet?.querySelector<HTMLElement>('[data-autofocus]')
+        try {
+          auto?.focus({ preventScroll: true } as FocusOptions)
+        } catch {
+          auto?.focus()
+        }
+      }),
+    )
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  // Keyboard HP: susutkan sheet biar footer tetap di atas keyboard, form tidak ke-scroll paksa
+  useEffect(() => {
+    const sheet = sheetRef.current
+    if (!sheet) return
+    const vv = window.visualViewport
+    if (!vv) return
+    function sync() {
+      // Sisakan ruang browser chrome; sheet max 92% viewport yang terlihat
+      const avail = Math.round(vv!.height * 0.92)
+      sheet!.style.maxHeight = `${avail}px`
+    }
+    sync()
+    vv.addEventListener('resize', sync)
+    return () => vv.removeEventListener('resize', sync)
+  }, [])
+
+  // ESC (desktop)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') animateOut()
@@ -66,164 +107,107 @@ export default function BottomSheet({ onClose, header, children, footer, maxHeig
     return () => window.removeEventListener('keydown', onKey)
   }, [animateOut])
 
-  function handleDown(e: React.PointerEvent) {
-    if (leavingRef.current) return
-    const el = e.currentTarget as HTMLElement
-    try {
-      el.setPointerCapture(e.pointerId)
-    } catch {
-      /* abaikan */
+  // Drag HANYA di handle. Mutasi DOM langsung, tanpa re-render.
+  useEffect(() => {
+    const handle = handleRef.current
+    const sheet = sheetRef.current
+    const backdrop = backdropRef.current
+    if (!handle || !sheet) return
+
+    function paint(dy: number) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => {
+        const y = dy < 0 ? dy * 0.2 : dy // resistance ke atas
+        sheet!.style.transform = `translateY(${Math.max(0, y)}px)`
+        if (backdrop) backdrop.style.opacity = String(Math.max(0, 0.4 * (1 - Math.max(0, dy) / (window.innerHeight * 0.8))))
+      })
     }
-    drag.current = { startY: e.clientY, lastY: e.clientY, lastT: performance.now(), velocity: 0, mode: 'handle' }
-    setDragging(true)
-  }
 
-  function handleMove(e: React.PointerEvent) {
-    if (drag.current.mode !== 'handle' || leavingRef.current) return
-    const dy = e.clientY - drag.current.startY
-    const now = performance.now()
-    const dt = Math.max(1, now - drag.current.lastT)
-    drag.current.velocity = (e.clientY - drag.current.lastY) / dt
-    drag.current.lastY = e.clientY
-    drag.current.lastT = now
-    // Tahan dikit kalau didorong ke atas (resistance), bebas kalau ke bawah
-    setDragY(dy < 0 ? dy * 0.25 : dy)
-  }
-
-  function handleUp() {
-    if (drag.current.mode !== 'handle') return
-    const dy = dragY
-    const v = drag.current.velocity
-    drag.current.mode = null
-    setDragging(false)
-    if (dy > DISMISS_Y || (dy > 24 && v > DISMISS_VELOCITY)) {
-      // Ikuti jari sampai keluar layar biar terasa nempel
-      setDragY(window.innerHeight)
-      animateOut()
-    } else {
-      setDragY(0)
+    function down(e: PointerEvent) {
+      if (leavingRef.current) return
+      dragRef.current = { active: true, startY: e.clientY, dy: 0, lastY: e.clientY, lastT: performance.now(), velocity: 0 }
+      sheet!.style.transition = 'none'
+      if (backdrop) backdrop.style.transition = 'none'
+      try {
+        handle!.setPointerCapture(e.pointerId)
+      } catch {
+        /* abaikan */
+      }
     }
-  }
 
-  // Swipe di area konten: kalau posisi scroll sudah mentok atas + swipe ke bawah → tutup.
-  // Kalau konten lagi di tengah/bawah → biarin scroll normal seperti biasa.
-  function contentTouchStart(e: React.TouchEvent) {
-    if (leavingRef.current) return
-    const t = e.touches[0]
-    const scroller = scrollRef.current
-    drag.current = {
-      startY: t.clientY,
-      lastY: t.clientY,
-      lastT: performance.now(),
-      velocity: 0,
-      mode: scroller && scroller.scrollTop <= 0 ? 'content' : null,
+    function move(e: PointerEvent) {
+      const d = dragRef.current
+      if (!d.active || leavingRef.current) return
+      const now = performance.now()
+      const dt = Math.max(1, now - d.lastT)
+      d.velocity = (e.clientY - d.lastY) / dt
+      d.lastY = e.clientY
+      d.lastT = now
+      d.dy = e.clientY - d.startY
+      paint(d.dy)
     }
-  }
 
-  function contentTouchMove(e: React.TouchEvent) {
-    if (drag.current.mode !== 'content' || leavingRef.current) return
-    const t = e.touches[0]
-    const dy = t.clientY - drag.current.startY
-    if (dy <= 0) {
-      // Swipe ke atas = scroll biasa, lepas mode drag
-      drag.current.mode = null
-      setDragY(0)
-      return
+    function up() {
+      const d = dragRef.current
+      if (!d.active) return
+      d.active = false
+      cancelAnimationFrame(rafRef.current)
+      if (d.dy > DISMISS_Y || (d.dy > 30 && d.velocity > 0.5)) {
+        animateOut()
+      } else {
+        // Balik mentok, tidak nyangkut setengah (sumber "form kegeser")
+        sheet!.style.transition = 'transform 0.2s ease-out'
+        sheet!.style.transform = 'translateY(0)'
+        if (backdrop) {
+          backdrop.style.transition = 'opacity 0.2s ease-out'
+          backdrop.style.opacity = '0.4'
+        }
+      }
+      d.dy = 0
+      d.velocity = 0
     }
-    const now = performance.now()
-    const dt = Math.max(1, now - drag.current.lastT)
-    drag.current.velocity = (t.clientY - drag.current.lastY) / dt
-    drag.current.lastY = t.clientY
-    drag.current.lastT = now
-    setDragging(true)
-    setDragY(dy)
-    // Cegah scroll chain ke body selama sheet di-drag
-    if (e.cancelable) e.preventDefault()
-  }
 
-  function contentTouchEnd() {
-    if (drag.current.mode !== 'content') return
-    const dy = dragY
-    const v = drag.current.velocity
-    drag.current.mode = null
-    setDragging(false)
-    if (dy > DISMISS_Y || (dy > 24 && v > DISMISS_VELOCITY)) {
-      setDragY(window.innerHeight)
-      animateOut()
-    } else {
-      setDragY(0)
+    handle.addEventListener('pointerdown', down)
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+    return () => {
+      handle.removeEventListener('pointerdown', down)
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+      cancelAnimationFrame(rafRef.current)
     }
-  }
-
-  const sheetTranslate = leaving
-    ? 'translateY(100%)'
-    : dragging
-      ? `translateY(${dragY}px)`
-      : entered
-        ? 'translateY(0)'
-        : 'translateY(100%)'
-  // Backdrop ikut menipis saat di-drag ke bawah
-  const backdropOpacity = leaving ? 0 : dragging ? Math.max(0, 1 - dragY / (window.innerHeight * 0.9)) * 0.4 : entered ? 0.4 : 0
+  }, [animateOut, entered])
 
   return (
     <div className={`fixed inset-0 ${zIndex} flex items-end sm:items-center justify-center`} role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-slate-900"
-        style={{ opacity: backdropOpacity, transition: dragging ? 'none' : 'opacity 0.24s ease-out' }}
-        onClick={animateOut}
-      />
+      <div ref={backdropRef} className="absolute inset-0 bg-slate-900" style={{ opacity: 0 }} onClick={animateOut} />
       <div
         ref={sheetRef}
-        className="relative w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] flex flex-col overflow-hidden shadow-2xl"
-        style={{
-          maxHeight,
-          transform: sheetTranslate,
-          transition: dragging ? 'none' : 'transform 0.26s cubic-bezier(0.32, 0.72, 0.35, 1)',
-          willChange: 'transform',
-        }}
+        className="relative w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] flex flex-col overflow-hidden shadow-[0_-8px_30px_rgba(0,0,0,0.12)]"
+        style={{ maxHeight, willChange: 'transform' }}
       >
-        {/* === HANDLE + HEADER (sticky, selalu nempel di atas) === */}
-        <div
-          className="shrink-0 bg-white/95 backdrop-blur border-b border-slate-100 select-none"
-          style={{ touchAction: 'none' }}
-          onPointerDown={handleDown}
-          onPointerMove={handleMove}
-          onPointerUp={handleUp}
-          onPointerCancel={() => {
-            drag.current.mode = null
-            setDragging(false)
-            if (!leavingRef.current) setDragY(0)
-          }}
-        >
-          {/* zona sentuh handle diperbesar biar gampang di-swipe pakai jempol */}
-          <div className="pt-2.5 pb-1.5 px-5 cursor-grab active:cursor-grabbing" aria-hidden>
-            <div
-              className={`mx-auto rounded-full transition-all ${dragging ? 'bg-slate-400' : 'bg-slate-200'}`}
-              style={{ width: dragging ? 56 : 40, height: 5 }}
-            />
+        {/* HANDLE: satu-satunya area drag. Header judul di bawahnya diam. */}
+        <div ref={handleRef} className="shrink-0 select-none" style={{ touchAction: 'none' }}>
+          <div className="pt-2.5 pb-1.5 px-5 cursor-grab active:cursor-grabbing">
+            <div className="mx-auto rounded-full bg-slate-300" style={{ width: 40, height: 5 }} />
           </div>
-          <div className="px-5 pb-3">{header}</div>
         </div>
+        <div className="shrink-0 bg-white border-b border-slate-100 px-5 pb-3">{header}</div>
 
-        {/* === KONTEN (satu-satunya yang scroll) === */}
-        <div
-          ref={scrollRef}
-          className="bottom-sheet-scroll flex-1 overflow-y-auto overscroll-contain px-5 py-4"
-          style={{ WebkitOverflowScrolling: 'touch' as const }}
-          onTouchStart={contentTouchStart}
-          onTouchMove={contentTouchMove}
-          onTouchEnd={contentTouchEnd}
-        >
-          {children}
-        </div>
+        {/* KONTEN: scroll native, tidak pernah menggeser sheet */}
+        <div className="bottom-sheet-scroll flex-1 overflow-y-auto px-5 py-4">{children}</div>
 
-        {/* === FOOTER (sticky, selalu nempel di bawah) === */}
+        {/* FOOTER: sticky */}
         {footer && (
-          <div className="shrink-0 border-t border-slate-100 bg-white/95 backdrop-blur px-5 pt-3 pb-[calc(0.9rem+env(safe-area-inset-bottom))]">
+          <div className="shrink-0 border-t border-slate-100 bg-white px-5 pt-3 pb-[calc(0.9rem+env(safe-area-inset-bottom))]">
             {footer}
           </div>
         )}
       </div>
+      {/* state disembunyikan: dipakai biar exit transition konsisten */}
+      <span className="hidden">{leaving ? 'x' : ''}</span>
     </div>
   )
 }
