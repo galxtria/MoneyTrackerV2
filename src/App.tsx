@@ -28,6 +28,8 @@ import {
 import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
 import ScanSheet from './components/ScanSheet'
+import Onboarding from './components/Onboarding'
+import ConfirmSheet, { type ConfirmReq } from './components/ConfirmSheet'
 import { CATEGORIES, PAYMENTS, categoryById } from './lib/categories'
 import { CUSTOM_COLORS, CUSTOM_ICONS, registerCustomCats } from './lib/customCats'
 import { exportBackup, importBackup } from './lib/backup'
@@ -126,6 +128,24 @@ export default function App() {
   const undoTimer = useRef<number | null>(null)
   // true kalau form diisi dari scan struk → habis simpan langsung tunjukkan datanya
   const scanJustUsed = useRef(false)
+  // onboarding sekali + konfirmasi custom
+  const [onboarded, setOnboarded] = useState(() => {
+    try {
+      return localStorage.getItem('mt-onboarded') === '1'
+    } catch {
+      return true
+    }
+  })
+  const [confirmReq, setConfirmReq] = useState<ConfirmReq | null>(null)
+
+  function doneOnboarding() {
+    try {
+      localStorage.setItem('mt-onboarded', '1')
+    } catch {
+      /* abaikan */
+    }
+    setOnboarded(true)
+  }
 
   // budget per kategori editor
   const [editingCat, setEditingCat] = useState<string | null>(null)
@@ -177,6 +197,15 @@ export default function App() {
       window.clearTimeout(t2)
     }
   }, [loaded])
+
+  // Arah animasi pindah tab (kanan = maju, kiri = mundur)
+  const [slideDir, setSlideDir] = useState<'left' | 'right'>('right')
+  const prevTabRef = useRef<Tab>('home')
+  useEffect(() => {
+    const order: Tab[] = ['home', 'expenses', 'stats', 'goals']
+    setSlideDir(order.indexOf(tab) >= order.indexOf(prevTabRef.current) ? 'right' : 'left')
+    prevTabRef.current = tab
+  }, [tab])
 
   const homeExpenses = useMemo(() => all.filter((e) => e.date.startsWith(mkNow)), [all, mkNow])
   const viewed = useMemo(() => all.filter((e) => e.date.startsWith(viewMonth)), [all, viewMonth])
@@ -568,16 +597,23 @@ export default function App() {
     await refresh()
   }
 
-  async function deleteCustomCat(id: string, name: string) {
-    if (!confirm(`Hapus kategori "${name}"? Transaksinya dipindah ke Lainnya.`)) return
-    await db.transaction('rw', [db.expenses, db.categoryBudgets, db.customCats], async () => {
-      await db.expenses.where('categoryId').equals(id).modify({ categoryId: 'lainnya' })
-      await db.categoryBudgets.delete(id)
-      await db.customCats.delete(id)
+  function deleteCustomCat(id: string, name: string) {
+    setConfirmReq({
+      title: `Hapus kategori "${name}"?`,
+      message: 'Transaksinya dipindah ke Lainnya.',
+      okLabel: 'Hapus',
+      danger: true,
+      run: async () => {
+        await db.transaction('rw', [db.expenses, db.categoryBudgets, db.customCats], async () => {
+          await db.expenses.where('categoryId').equals(id).modify({ categoryId: 'lainnya' })
+          await db.categoryBudgets.delete(id)
+          await db.customCats.delete(id)
+        })
+        if (catId === id) setCatId('makan')
+        if (filterCat === id) setFilterCat('semua')
+        await refresh()
+      },
     })
-    if (catId === id) setCatId('makan')
-    if (filterCat === id) setFilterCat('semua')
-    await refresh()
   }
 
   async function doBackup() {
@@ -590,17 +626,24 @@ export default function App() {
     window.setTimeout(() => setBackupMsg(''), 6000)
   }
 
-  async function doRestore(f: File | undefined) {
+  function doRestore(f: File | undefined) {
     if (!f) return
-    if (!confirm('Restore MENGGANTIKAN semua data saat ini dengan isi file. Backup dulu kalau ragu. Lanjut?')) return
-    try {
-      const { expenses } = await importBackup(f)
-      setBackupMsg(`Restore berhasil: ${expenses} transaksi dikembalikan.`)
-      await refresh()
-    } catch (err) {
-      setBackupMsg(err instanceof Error ? err.message : 'File tidak valid.')
-    }
-    window.setTimeout(() => setBackupMsg(''), 6000)
+    setConfirmReq({
+      title: 'Restore dari file?',
+      message: 'MENGGANTIKAN semua data saat ini dengan isi file. Backup dulu kalau ragu.',
+      okLabel: 'Restore',
+      danger: true,
+      run: async () => {
+        try {
+          const { expenses } = await importBackup(f)
+          setBackupMsg(`Restore berhasil: ${expenses} transaksi dikembalikan.`)
+          await refresh()
+        } catch (err) {
+          setBackupMsg(err instanceof Error ? err.message : 'File tidak valid.')
+        }
+        window.setTimeout(() => setBackupMsg(''), 6000)
+      },
+    })
   }
 
   async function exportExcelFile() {
@@ -651,17 +694,30 @@ export default function App() {
     await refresh()
   }
 
-  async function skipRutin(r: Recurring) {
-    if (!confirm(`Lewati "${r.name}" bulan ini tanpa mencatat?`)) return
-    if (r.id) await db.recurrings.update(r.id, { lastPaidMonth: mkNow })
-    await refresh()
+  function skipRutin(r: Recurring) {
+    setConfirmReq({
+      title: `Lewati "${r.name}"?`,
+      message: 'Bulan ini tidak dicatat sebagai pengeluaran.',
+      okLabel: 'Lewati',
+      run: async () => {
+        if (r.id) await db.recurrings.update(r.id, { lastPaidMonth: mkNow })
+        await refresh()
+      },
+    })
   }
 
-  async function deleteRutin(id?: number) {
+  function deleteRutin(id?: number) {
     if (!id) return
-    if (!confirm('Hapus rutin ini?')) return
-    await db.recurrings.delete(id)
-    await refresh()
+    setConfirmReq({
+      title: 'Hapus rutin ini?',
+      message: 'Tagihan tidak lagi diingatkan tiap bulan.',
+      okLabel: 'Hapus',
+      danger: true,
+      run: async () => {
+        await db.recurrings.delete(id)
+        await refresh()
+      },
+    })
   }
 
   async function saveGoal() {
@@ -696,17 +752,31 @@ export default function App() {
     await refresh()
   }
 
-  async function deleteGoal(id?: number) {
+  function deleteGoal(id?: number) {
     if (!id) return
-    if (!confirm('Hapus target ini?')) return
-    await db.goals.delete(id)
-    await refresh()
+    setConfirmReq({
+      title: 'Hapus target ini?',
+      message: 'Progress tabungan yang sudah terkumpul ikut hilang.',
+      okLabel: 'Hapus',
+      danger: true,
+      run: async () => {
+        await db.goals.delete(id)
+        await refresh()
+      },
+    })
   }
 
-  async function resetAll() {
-    if (!confirm('Hapus SEMUA data pengeluaran di HP ini? Tidak bisa dibatalkan.')) return
-    await db.expenses.clear()
-    await refresh()
+  function resetAll() {
+    setConfirmReq({
+      title: 'Hapus SEMUA data?',
+      message: 'Seluruh pengeluaran di HP ini dihapus permanen. Backup dulu kalau ragu.',
+      okLabel: 'Hapus semua',
+      danger: true,
+      run: async () => {
+        await db.expenses.clear()
+        await refresh()
+      },
+    })
   }
 
   const [vy, vm] = viewMonth.split('-').map(Number)
@@ -745,6 +815,7 @@ export default function App() {
       </header>
 
       <main className={`flex-1 px-5 py-3 pb-32 ${splashPhase === 'show' ? 'opacity-0' : 'anim-home-in'}`}>
+        <div key={tab} className={slideDir === 'left' ? 'anim-page-left' : 'anim-page-right'}>
         {tab === 'home' && (
           <div className="space-y-4">
             {/* Hero card */}
@@ -777,7 +848,7 @@ export default function App() {
                     </button>
                   </div>
                   <div className="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
-                    <div className="h-full bg-white rounded-full" style={{ width: `${pct}%` }} />
+                    <div className="h-full bg-white rounded-full transition-[width] duration-500" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="mt-2 text-[11px] text-blue-50 flex justify-between">
                     <span>Keluar {formatRp(totalMonth)} ({pct}%)</span>
@@ -949,7 +1020,7 @@ export default function App() {
                 </div>
                 <p className="font-extrabold">{formatRp(budget)}</p>
                 <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                  <div className="h-full bg-blue-600 rounded-full" style={{ width: `${budget > 0 ? Math.min(100, (totalViewed / budget) * 100) : 0}%` }} />
+                  <div className="h-full bg-blue-600 rounded-full transition-[width] duration-500" style={{ width: `${budget > 0 ? Math.min(100, (totalViewed / budget) * 100) : 0}%` }} />
                 </div>
               </div>
             </section>
@@ -1020,7 +1091,7 @@ export default function App() {
             <section className="bg-white rounded-3xl p-5 border border-blue-100 shadow-sm text-center">
               <p className="text-xs text-slate-400">You have spent <b className="text-blue-700">{formatRp(totalViewed)}</b> this month.</p>
               <div className="mt-3 h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                <div className="h-full bg-blue-600 rounded-full" style={{ width: `${budget ? Math.min(100, (totalViewed / budget) * 100) : 0}%` }} />
+                <div className="h-full bg-blue-600 rounded-full transition-[width] duration-500" style={{ width: `${budget ? Math.min(100, (totalViewed / budget) * 100) : 0}%` }} />
               </div>
               <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
                 <span className="text-blue-700">{budget ? Math.round((totalViewed / budget) * 100) : 0}% terpakai</span>
@@ -1169,7 +1240,7 @@ export default function App() {
                     {limit > 0 ? (
                       <>
                         <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                          <div className={`h-full rounded-full ${over ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${p}%` }} />
+                          <div className={`h-full rounded-full transition-[width] duration-500 ${over ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${p}%` }} />
                         </div>
                         <p className={`text-[11px] mt-1 ${over ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>{over ? `Over ${formatRp(total - limit)} (${p}%)` : `${p}% dari budget`}</p>
                       </>
@@ -1283,7 +1354,7 @@ export default function App() {
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">{formatRp(g.currentAmount)} / {formatRp(g.targetAmount)} • {p}%</p>
                     <div className="h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                      <div className={`h-full rounded-full ${done ? 'bg-blue-800' : 'bg-blue-500'}`} style={{ width: `${p}%` }} />
+                      <div className={`h-full rounded-full transition-[width] duration-500 ${done ? 'bg-blue-800' : 'bg-blue-500'}`} style={{ width: `${p}%` }} />
                     </div>
                     <div className="flex gap-2 mt-2">
                       {!done && <button onClick={() => addSaving(g)} className="flex-1 text-xs font-bold bg-blue-50 text-blue-700 rounded-xl py-2">Nabung +</button>}
@@ -1346,12 +1417,22 @@ export default function App() {
                 const c = categoryById(r.categoryId)
                 const CI = c.Icon
                 const lunas = r.lastPaidMonth === mkNow
+                const daysLeft = r.dayOfMonth - now.getDate()
+                const hint = lunas
+                  ? { text: 'Lunas bulan ini', cls: 'text-slate-400' }
+                  : daysLeft < 0
+                    ? { text: 'Lewat jatuh tempo!', cls: 'text-red-600 font-semibold' }
+                    : daysLeft === 0
+                      ? { text: 'Jatuh tempo hari ini!', cls: 'text-red-600 font-semibold' }
+                      : daysLeft <= 3
+                        ? { text: `Jatuh tempo ${daysLeft} hari lagi`, cls: 'text-amber-600 font-semibold' }
+                        : { text: 'Belum bayar', cls: 'text-slate-400' }
                 return (
                   <div key={r.id} className="bg-white border border-blue-100 rounded-2xl p-3 flex items-center gap-2">
                     <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: c.color + '14', color: c.color }}><CI size={16} /></span>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-slate-900 truncate">{r.name} • {formatRp(r.amount)}</p>
-                      <p className="text-[11px] text-slate-400">Tgl {r.dayOfMonth} • {r.payment} • {lunas ? 'Lunas bulan ini' : 'Belum bayar'}</p>
+                      <p className={`text-[11px] ${hint.cls}`}>Tgl {r.dayOfMonth} • {r.payment} • {hint.text}</p>
                     </div>
                     {!lunas && r.active && <button onClick={() => payRutin(r)} className="text-[11px] bg-blue-600 text-white font-bold rounded-full px-2.5 py-1.5">Catat</button>}
                     {!lunas && r.active && <button onClick={() => skipRutin(r)} className="text-[11px] text-slate-400 px-1">Lewati</button>}
@@ -1382,6 +1463,7 @@ export default function App() {
             </section>
           </div>
         )}
+        </div>
       </main>
 
       {showScan && (
@@ -1403,9 +1485,13 @@ export default function App() {
         />
       )}
 
+      {confirmReq && <ConfirmSheet req={confirmReq} onClose={() => setConfirmReq(null)} />}
+
+      {!onboarded && <Onboarding onDone={doneOnboarding} />}
+
       {/* Toast urungkan hapus */}
       {showUndo && (
-        <div className="fixed bottom-24 inset-x-0 z-30 flex justify-center px-6">
+        <div className="fixed bottom-24 inset-x-0 z-30 flex justify-center px-6 anim-rise">
           <div className="bg-slate-900 text-white rounded-full pl-4 pr-2 py-2 flex items-center gap-3 shadow-xl text-sm">
             <span className="text-[13px]">Pengeluaran dihapus</span>
             <button onClick={undoDelete} className="bg-blue-600 text-[13px] font-bold rounded-full px-3 py-1.5">Urungkan</button>
@@ -1428,7 +1514,7 @@ export default function App() {
 
       {showBudgetEdit && (
         <div className="fixed inset-0 z-30 bg-slate-900/40 grid place-items-center p-6" onClick={() => setShowBudgetEdit(false)}>
-          <div className="w-full max-w-xs bg-white rounded-3xl p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-xs bg-white rounded-3xl p-5 anim-sheet-up" onClick={(e) => e.stopPropagation()}>
             <p className="font-bold text-slate-900">Uang saku bulanan</p>
             <p className="text-xs text-slate-500 mb-3">Salah input? Betulkan di sini, langsung tersimpan.</p>
             <input autoFocus inputMode="numeric" placeholder="2.000.000" value={budgetInput} onChange={(e) => setBudgetInput(groupDigits(e.target.value))} className="w-full border border-slate-200 rounded-2xl px-3 py-2.5 outline-none focus:border-blue-500 font-bold text-slate-900" />
@@ -1443,7 +1529,7 @@ export default function App() {
 
       {editingCat && (
         <div className="fixed inset-0 z-30 bg-slate-900/40 grid place-items-center p-6" onClick={() => setEditingCat(null)}>
-          <div className="w-full max-w-xs bg-white rounded-3xl p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-xs bg-white rounded-3xl p-5 anim-sheet-up" onClick={(e) => e.stopPropagation()}>
             <p className="font-bold text-slate-900">Budget {categoryById(editingCat).name}</p>
             <p className="text-xs text-slate-400 mb-3">Kosongkan / 0 buat hapus limit.</p>
             <input autoFocus inputMode="numeric" placeholder="900000" value={editingVal} onChange={(e) => setEditingVal(groupDigits(e.target.value))} className="w-full border border-slate-200 rounded-2xl px-3 py-2.5 outline-none focus:border-blue-500 font-bold text-slate-900" />
@@ -1458,7 +1544,7 @@ export default function App() {
 
       {showAdd && (
         <div className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center" onClick={closeAdd}>
-          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto anim-sheet-up" onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
             <div className="flex items-start justify-between gap-2">
               <div>

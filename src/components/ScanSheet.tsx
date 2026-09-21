@@ -90,7 +90,7 @@ export default function ScanSheet({ categories, onUse, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-40 bg-slate-900/50 flex items-end sm:items-center justify-center" onClick={onClose}>
       <div
-        className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto"
+        className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto anim-sheet-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
