@@ -828,7 +828,7 @@ export default function App() {
                   <p className="font-semibold">Set uang saku bulan ini</p>
                   <p className="text-sm text-blue-100 mb-3">Contoh: 2.000.000. Jadi patokan 100%.</p>
                   <div className="flex gap-2">
-                    <input inputMode="numeric" placeholder="2.000.000" value={budgetInput} onChange={(e) => setBudgetInput(groupDigits(e.target.value))} className="flex-1 min-w-0 rounded-xl px-3 py-2 text-slate-900 outline-none text-sm font-bold" />
+                    <input inputMode="numeric" placeholder="2.000.000" value={budgetInput} onChange={(e) => setBudgetInput(groupDigits(e.target.value))} className="flex-1 min-w-0 rounded-xl px-3 py-2 bg-white text-slate-900 outline-none text-sm font-bold placeholder:text-slate-400" />
                     <button onClick={saveBudget} className="bg-white text-blue-700 font-semibold rounded-xl px-4 text-sm shrink-0">OK</button>
                   </div>
                   {budgetInput && <p className="text-[11px] text-blue-100 mt-1.5">= {formatRp(parseAmount(budgetInput))}</p>}
