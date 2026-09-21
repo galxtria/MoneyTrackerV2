@@ -211,10 +211,13 @@ export default function App() {
   const anyOverlay = showAdd || showScan || !!editingCat || showBudgetEdit || !!confirmReq || !onboarded
   useEffect(() => {
     if (!anyOverlay) return
-    const prev = document.body.style.overflow
+    const prevBody = document.body.style.overflow
+    const prevHtml = document.documentElement.style.overflow
     document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
     return () => {
-      document.body.style.overflow = prev
+      document.body.style.overflow = prevBody
+      document.documentElement.style.overflow = prevHtml
     }
   }, [anyOverlay])
 
@@ -1554,8 +1557,11 @@ export default function App() {
       )}
 
       {showAdd && (
-        <div className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center" onClick={closeAdd}>
-          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-4 max-h-[92dvh] overflow-hidden anim-sheet-up" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center overscroll-contain"
+          style={{ touchAction: 'pan-x' }}
+          onClick={closeAdd}
+        >          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-4 max-h-[92dvh] overflow-hidden anim-sheet-up" onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-2" />
             <div className="flex items-start justify-between gap-2">
               <div>
