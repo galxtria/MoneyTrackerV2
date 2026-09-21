@@ -207,6 +207,17 @@ export default function App() {
     prevTabRef.current = tab
   }, [tab])
 
+  // Kunci scroll halaman saat ada overlay (posisi tetap, tidak goyang)
+  const anyOverlay = showAdd || showScan || !!editingCat || showBudgetEdit || !!confirmReq || !onboarded
+  useEffect(() => {
+    if (!anyOverlay) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [anyOverlay])
+
   const homeExpenses = useMemo(() => all.filter((e) => e.date.startsWith(mkNow)), [all, mkNow])
   const viewed = useMemo(() => all.filter((e) => e.date.startsWith(viewMonth)), [all, viewMonth])
 
@@ -1544,12 +1555,12 @@ export default function App() {
 
       {showAdd && (
         <div className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center" onClick={closeAdd}>
-          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-5 max-h-[92dvh] overflow-y-auto anim-sheet-up" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
+          <div className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] p-4 max-h-[92dvh] overflow-hidden anim-sheet-up" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-2" />
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-bold text-lg text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
-                <p className="text-xs text-slate-400 mb-3">{editingExpense ? 'Betulkan yang salah, lalu simpan.' : 'Nominal, kategori, simpan.'}</p>
+                <p className="font-bold text-[17px] text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
+                <p className="text-xs text-slate-400 mb-2">{editingExpense ? 'Betulkan yang salah, lalu simpan.' : 'Nominal, kategori, simpan.'}</p>
               </div>
               {!editingExpense && (
                 <button onClick={() => setShowScan(true)} className="shrink-0 text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-3 py-2 flex items-center gap-1.5">
@@ -1558,32 +1569,32 @@ export default function App() {
               )}
             </div>
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
-            <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} className="w-full text-3xl font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-3 mt-1 mb-2 outline-none focus:border-blue-500 bg-transparent" />
-            <div className="flex gap-2 mb-3 flex-wrap">
+            <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} className="w-full text-[28px] font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-2.5 mt-1 mb-1.5 outline-none focus:border-blue-500 bg-transparent" />
+            <div className="flex gap-2 mb-2 flex-wrap">
               {QUICK_AMOUNTS.map((q) => (
-                <button key={q} onClick={() => setAmountRaw(groupDigits(String(q)))} className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-3 py-1.5 font-semibold">{formatRp(q)}</button>
+                <button key={q} onClick={() => setAmountRaw(groupDigits(String(q)))} className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-3 py-1 font-semibold">{formatRp(q)}</button>
               ))}
               {amountRaw && <span className="text-[11px] self-center text-slate-400">= {formatRp(parseAmount(amountRaw))}</span>}
             </div>
             <label className="text-[11px] font-semibold text-slate-400">KATEGORI</label>
-            <div className="grid grid-cols-5 gap-2 mt-1 mb-3">
+            <div className="flex gap-1.5 mt-1 mb-2 overflow-x-auto pb-1 -mx-4 px-4">
               {cats.map((c) => {
                 const CI = c.Icon
                 const active = catId === c.id
                 return (
-                  <button key={c.id} onClick={() => setCatId(c.id)} className={`rounded-2xl border p-2 text-center ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
-                    <CI size={20} className="mx-auto" style={{ color: c.color }} />
-                    <div className="text-[9px] font-semibold leading-tight mt-1 text-slate-600">{c.name}</div>
+                  <button key={c.id} onClick={() => setCatId(c.id)} className={`shrink-0 w-[62px] rounded-2xl border py-2 text-center snap-start ${active ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                    <CI size={18} className="mx-auto" style={{ color: c.color }} />
+                    <div className="text-[9px] font-semibold leading-tight mt-1 text-slate-600 truncate px-0.5">{c.name}</div>
                   </button>
                 )
               })}
             </div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-2 gap-3 mb-2">
               <div>
                 <label className="text-[11px] font-semibold text-slate-400">BAYAR PAKAI</label>
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   {PAYMENTS.map((p) => (
-                    <button key={p} onClick={() => setPayment(p)} className={`text-[11px] rounded-full px-3 py-1.5 border font-semibold ${payment === p ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500'}`}>{p}</button>
+                    <button key={p} onClick={() => setPayment(p)} className={`text-[11px] rounded-full px-3 py-1 border font-semibold ${payment === p ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500'}`}>{p}</button>
                   ))}
                 </div>
               </div>
@@ -1595,20 +1606,20 @@ export default function App() {
             </div>
             <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = '' }} />
             {photo ? (
-              <div className="relative mb-3">
-                <img src={photo} alt="Bukti" className="w-full max-h-44 object-cover rounded-2xl border border-slate-200" />
+              <div className="relative mb-2">
+                <img src={photo} alt="Bukti" className="w-full max-h-28 object-cover rounded-2xl border border-slate-200" />
                 <button onClick={() => setPhoto(undefined)} className="absolute top-2 right-2 text-[11px] font-bold bg-slate-900/70 text-white rounded-full px-3 py-1.5">
                   Hapus foto
                 </button>
               </div>
             ) : (
-              <button onClick={() => photoRef.current?.click()} className="w-full mb-3 border border-dashed border-blue-200 text-blue-700 text-sm font-semibold rounded-2xl py-2.5 flex items-center justify-center gap-1.5">
+              <button onClick={() => photoRef.current?.click()} className="w-full mb-2 border border-dashed border-blue-200 text-blue-700 text-sm font-semibold rounded-2xl py-2 flex items-center justify-center gap-1.5">
                 <Camera size={15} /> Lampirkan foto struk (opsional)
               </button>
             )}
-            <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px]">{editingExpense ? 'Simpan perubahan' : `Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
+            <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3 text-[15px]">{editingExpense ? 'Simpan perubahan' : `Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
             {editingExpense && (
-              <button onClick={duplicateExpense} className="w-full mt-2 bg-blue-50 text-blue-700 font-bold rounded-2xl py-3 text-sm">Duplikat buat hari ini</button>
+              <button onClick={duplicateExpense} className="w-full mt-1.5 bg-blue-50 text-blue-700 font-bold rounded-2xl py-2.5 text-sm">Duplikat buat hari ini</button>
             )}
           </div>
         </div>
