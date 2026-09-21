@@ -1569,7 +1569,7 @@ export default function App() {
               )}
             </div>
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
-            <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} className="w-full text-[28px] font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-2.5 mt-1 mb-1.5 outline-none focus:border-blue-500 bg-transparent" />
+            <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} style={{ fontSize: 28 }} className="w-full font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-2.5 mt-1 mb-1.5 outline-none focus:border-blue-500 bg-transparent" />
             <div className="flex gap-2 mb-2 flex-wrap">
               {QUICK_AMOUNTS.map((q) => (
                 <button key={q} onClick={() => setAmountRaw(groupDigits(String(q)))} className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-3 py-1 font-semibold">{formatRp(q)}</button>
