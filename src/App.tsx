@@ -1625,13 +1625,13 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-2.5">
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-semibold text-slate-400">TANGGAL</label>
-                <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} className="w-full mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm" />
+                <input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} className="w-full min-w-0 mt-1 border border-slate-200 rounded-2xl px-2.5 py-2 bg-transparent text-[13px]" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-semibold text-slate-400">CATATAN</label>
-                <input placeholder="bakso" value={note} onChange={(e) => setNote(e.target.value)} enterKeyHint="done" className="w-full mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm outline-none focus:border-blue-500" />
+                <input placeholder="bakso" value={note} onChange={(e) => setNote(e.target.value)} enterKeyHint="done" className="w-full min-w-0 mt-1 border border-slate-200 rounded-2xl px-3 py-2 bg-transparent text-sm outline-none focus:border-blue-500" />
               </div>
             </div>
 
