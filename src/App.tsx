@@ -1575,7 +1575,7 @@ export default function App() {
               )}
             </div>
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
-            <input autoFocus inputMode="numeric" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} style={{ fontSize: 28 }} className="w-full font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-2.5 mt-1 mb-1.5 outline-none focus:border-blue-500 bg-transparent" />
+            <input autoFocus inputMode="numeric" enterKeyHint="done" placeholder="25.000" value={amountRaw} onChange={(e) => setAmountRaw(groupDigits(e.target.value))} style={{ fontSize: 28 }} className="w-full font-extrabold text-slate-900 border border-slate-200 rounded-2xl px-4 py-2.5 mt-1 mb-1.5 outline-none focus:border-blue-500 bg-transparent" />
             <div className="flex gap-2 mb-2 flex-wrap">
               {QUICK_AMOUNTS.map((q) => (
                 <button key={q} onClick={() => setAmountRaw(groupDigits(String(q)))} className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-3 py-1 font-semibold">{formatRp(q)}</button>
@@ -1623,9 +1623,13 @@ export default function App() {
                 <Camera size={15} /> Lampirkan foto struk (opsional)
               </button>
             )}
-            <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3 text-[15px]">{editingExpense ? 'Simpan perubahan' : `Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
-            {editingExpense && (
-              <button onClick={duplicateExpense} className="w-full mt-1.5 bg-blue-50 text-blue-700 font-bold rounded-2xl py-2.5 text-sm">Duplikat buat hari ini</button>
+            {editingExpense ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={saveExpense} className="bg-blue-600 text-white font-bold rounded-2xl py-3 text-[15px]">Simpan</button>
+                <button onClick={duplicateExpense} className="bg-blue-50 text-blue-700 font-bold rounded-2xl py-3 text-sm">Duplikat</button>
+              </div>
+            ) : (
+              <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3 text-[15px]">{`Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
             )}
           </div>
         </div>
