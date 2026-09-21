@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownUp,
   Bell,
@@ -25,7 +25,6 @@ import {
   TriangleAlert,
   Wallet,
 } from 'lucide-react'
-import { Bar, BarChart, Cell, LabelList, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
 import ScanSheet from './components/ScanSheet'
@@ -51,6 +50,15 @@ type Tab = 'home' | 'expenses' | 'stats' | 'goals'
 const QUICK_AMOUNTS = [10000, 25000, 50000, 100000]
 const BLUE_SCALE = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#0ea5e9', '#0284c7', '#1e40af', '#334155', '#64748b']
 
+// Grafik dimuat belakangan (lazy) biar app kebuka instan
+const WeekChart = lazy(() => import('./components/WeekChart'))
+const DonutChart = lazy(() => import('./components/DonutChart'))
+const YearChart = lazy(() => import('./components/YearChart'))
+
+function chartFallback(h: string) {
+  return <div className={`${h} animate-pulse bg-slate-100 rounded-2xl`} />
+}
+
 function shiftMonth(mk: string, delta: number): string {
   const [y, m] = mk.split('-').map(Number)
   const d = new Date(y, m - 1 + delta, 1)
@@ -63,19 +71,6 @@ function mondayOf(iso: string): Date {
   const dow = (dt.getDay() + 6) % 7
   dt.setDate(dt.getDate() - dow)
   return dt
-}
-
-// Tooltip chart: hanya muncul kalau bar ada isinya (Rp0 tidak ditampilkan)
-function ChartTip(props: any) {
-  const v = Number(props?.payload?.[0]?.value ?? 0)
-  if (!props?.active || v <= 0) return null
-  const day = props?.payload?.[0]?.payload?.day ?? ''
-  return (
-    <div className="bg-slate-900 text-white rounded-xl px-3 py-2 shadow-lg">
-      <p className="text-[10px] text-slate-300">{day}</p>
-      <p className="text-sm font-bold">{formatRp(v)}</p>
-    </div>
-  )
 }
 
 export default function App() {
@@ -91,6 +86,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [splash, setSplash] = useState(true)
 
   const now = new Date()
   const mkNow = monthKey(now)
@@ -136,6 +132,7 @@ export default function App() {
 
   // rutin form
   const [showRutinForm, setShowRutinForm] = useState(false)
+  const [editingRutinId, setEditingRutinId] = useState<number | null>(null)
   const [rName, setRName] = useState('')
   const [rAmount, setRAmount] = useState('')
   const [rCat, setRCat] = useState('kos')
@@ -145,6 +142,7 @@ export default function App() {
   // goal form
   const [gName, setGName] = useState('')
   const [gTarget, setGTarget] = useState('')
+  const [editingGoalId, setEditingGoalId] = useState<number | null>(null)
 
   async function refresh() {
     const [b, cb] = await Promise.all([getMonthlyBudget(), getCategoryBudgets()])
@@ -165,6 +163,11 @@ export default function App() {
 
   useEffect(() => {
     refresh().finally(() => setLoaded(true))
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setSplash(false), 1200)
+    return () => window.clearTimeout(t)
   }, [])
 
   const homeExpenses = useMemo(() => all.filter((e) => e.date.startsWith(mkNow)), [all, mkNow])
@@ -280,6 +283,25 @@ export default function App() {
     () => all.filter((e) => e.date.startsWith(prevMkNow)).reduce((s, e) => s + e.amount, 0),
     [all, prevMkNow],
   )
+
+  // Ringkasan tahunan (tab Stats)
+  const [statYear, setStatYear] = useState(now.getFullYear())
+  const yearData = useMemo(() => {
+    const arr = Array.from({ length: 12 }, (_, i) => ({
+      label: new Date(statYear, i, 1).toLocaleDateString('id-ID', { month: 'short' }),
+      total: 0,
+      current: statYear === now.getFullYear() && i === now.getMonth(),
+    }))
+    for (const e of all) {
+      const [y, m] = e.date.split('-').map(Number)
+      if (y === statYear && m >= 1 && m <= 12) arr[m - 1].total += e.amount
+    }
+    return arr
+  }, [all, statYear, now])
+  const yearTotal = useMemo(() => yearData.reduce((s, d) => s + d.total, 0), [yearData])
+  const yearMonths = statYear === now.getFullYear() ? now.getMonth() + 1 : 12
+  const yearAvg = yearMonths > 0 ? Math.round(yearTotal / yearMonths) : 0
+  const yearPeak = useMemo(() => yearData.reduce((a, b) => (b.total > a.total ? b : a), yearData[0]), [yearData])
 
   // Insight otomatis — dihitung dari catatanmu, bukan tebakan
   const insights = useMemo(() => {
@@ -585,12 +607,34 @@ export default function App() {
       alert('Isi nama + nominal rutin, contoh: Kos 800000')
       return
     }
-    await db.recurrings.add({ name: rName.trim(), amount, categoryId: rCat, payment: rPay, dayOfMonth: day, lastPaidMonth: '', active: true, createdAt: Date.now() })
+    if (editingRutinId) {
+      await db.recurrings.update(editingRutinId, {
+        name: rName.trim(),
+        amount,
+        categoryId: rCat,
+        payment: rPay,
+        dayOfMonth: day,
+      })
+    } else {
+      await db.recurrings.add({ name: rName.trim(), amount, categoryId: rCat, payment: rPay, dayOfMonth: day, lastPaidMonth: '', active: true, createdAt: Date.now() })
+    }
     setRName('')
     setRAmount('')
     setRDay('1')
+    setEditingRutinId(null)
     setShowRutinForm(false)
     await refresh()
+  }
+
+  function openEditRutin(r: Recurring) {
+    if (!r.id) return
+    setEditingRutinId(r.id)
+    setRName(r.name)
+    setRAmount(groupDigits(String(r.amount)))
+    setRCat(r.categoryId)
+    setRPay(r.payment)
+    setRDay(String(r.dayOfMonth))
+    setShowRutinForm(true)
   }
 
   async function payRutin(r: Recurring) {
@@ -617,10 +661,22 @@ export default function App() {
       alert('Isi nama target + nominal, contoh: Laptop 5000000')
       return
     }
-    await db.goals.add({ name: gName.trim(), targetAmount: parseAmount(gTarget), currentAmount: 0, createdAt: Date.now() })
+    if (editingGoalId) {
+      await db.goals.update(editingGoalId, { name: gName.trim(), targetAmount: parseAmount(gTarget) })
+    } else {
+      await db.goals.add({ name: gName.trim(), targetAmount: parseAmount(gTarget), currentAmount: 0, createdAt: Date.now() })
+    }
     setGName('')
     setGTarget('')
+    setEditingGoalId(null)
     await refresh()
+  }
+
+  function openEditGoal(g: SavingGoal) {
+    if (!g.id) return
+    setEditingGoalId(g.id)
+    setGName(g.name)
+    setGTarget(groupDigits(String(g.targetAmount)))
   }
 
   async function addSaving(g: SavingGoal) {
@@ -652,6 +708,16 @@ export default function App() {
 
   return (
     <div className="min-h-dvh max-w-md mx-auto bg-slate-100 flex flex-col">
+      {/* Splash screen */}
+      {splash && (
+        <div className="fixed inset-0 z-50 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 flex flex-col items-center justify-center gap-3">
+          <div className="pointer-events-none absolute top-1/4 left-1/4 w-56 h-56 rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute bottom-1/4 right-1/4 w-40 h-40 rounded-full bg-blue-300/20" />
+          <img src="/logo.svg" alt="MoneyTracker" className="relative w-20 h-20 rounded-[22px] shadow-2xl" />
+          <p className="relative font-extrabold text-xl text-white tracking-tight">MoneyTracker</p>
+          <p className="relative text-xs text-blue-200">Catat pengeluaran dalam 5 detik</p>
+        </div>
+      )}
       {/* Header ala mockup */}
       <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pt-3 pb-2 flex items-center gap-2.5">
         <img src="/logo.svg" alt="Logo MoneyTracker" className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
@@ -792,25 +858,9 @@ export default function App() {
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">Tiap bar = total keluar 1 hari • bar biru tua = hari ini • angka sudah tertulis di atas bar</p>
               <div className="h-52 mt-1">
-                {weekStats.max > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={last7} barCategoryGap="30%" margin={{ top: 14, right: 0, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: '#94a3b8' }} />
-                      <YAxis width={40} tickLine={false} axisLine={false} fontSize={10} tick={{ fill: '#94a3b8' }} tickFormatter={(v: number) => formatRpShort(v)} />
-                      <Tooltip content={<ChartTip />} cursor={{ fill: '#eff6ff' }} />
-                      <Bar dataKey="total" radius={[7, 7, 3, 3]}>
-                        {last7.map((d, i) => (
-                          <Cell key={i} fill={d.today ? '#1d4ed8' : '#bfdbfe'} />
-                        ))}
-                        <LabelList dataKey="total" position="top" fontSize={9} fill="#64748b" formatter={(v) => (Number(v) > 0 ? formatRpShort(Number(v)) : '')} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full grid place-items-center text-center">
-                    <p className="text-xs text-slate-400">Belum ada pengeluaran 7 hari terakhir.<br />Tap + buat catat.</p>
-                  </div>
-                )}
+                <Suspense fallback={chartFallback('h-full')}>
+                  <WeekChart data={last7} />
+                </Suspense>
               </div>
             </section>
 
@@ -1013,14 +1063,9 @@ export default function App() {
               {byCategory.length > 0 ? (
                 <>
                   <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RePieChart>
-                        <Pie data={byCategory} dataKey="total" nameKey="name" innerRadius={58} outerRadius={88} paddingAngle={3} strokeWidth={0}>
-                          {byCategory.map((c) => (<Cell key={c.id} fill={c.fill} />))}
-                        </Pie>
-                        <Tooltip formatter={(v) => formatRp(Number(v))} />
-                      </RePieChart>
-                    </ResponsiveContainer>
+                    <Suspense fallback={chartFallback('h-full')}>
+                      <DonutChart data={byCategory} />
+                    </Suspense>
                   </div>
                   <ul className="mt-1 space-y-1.5">
                     {byCategory.slice(0, 5).map((c) => {
@@ -1040,6 +1085,52 @@ export default function App() {
               ) : (
                 <p className="text-xs text-slate-400 text-center py-6">Belum ada data bulan ini.</p>
               )}
+            </section>
+
+            {/* Ringkasan tahunan — tap bar buat buka bulannya */}
+            <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setStatYear((y) => y - 1)}
+                  className="w-8 h-8 grid place-items-center rounded-full bg-slate-100 text-slate-600"
+                  aria-label="tahun lalu"
+                >
+                  <ChevronLeft size={17} />
+                </button>
+                <p className="font-semibold text-sm text-slate-900">Tahun {statYear}</p>
+                <button
+                  onClick={() => setStatYear((y) => Math.min(now.getFullYear(), y + 1))}
+                  className="w-8 h-8 grid place-items-center rounded-full bg-slate-100 text-slate-600"
+                  aria-label="tahun depan"
+                >
+                  <ChevronRight size={17} />
+                </button>
+              </div>
+              <div className="h-44 mt-1">
+                <Suspense fallback={chartFallback('h-full')}>
+                  <YearChart
+                    year={statYear}
+                    data={yearData}
+                    onPick={(i) => setViewMonth(`${statYear}-${String(i + 1).padStart(2, '0')}`)}
+                  />
+                </Suspense>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2 text-center">
+                <div className="bg-slate-50 rounded-2xl p-2">
+                  <p className="text-[10px] text-slate-400">Total {statYear}</p>
+                  <p className="text-[13px] font-extrabold text-slate-900">{formatRpShort(yearTotal)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-2">
+                  <p className="text-[10px] text-slate-400">Rata-rata/bulan</p>
+                  <p className="text-[13px] font-extrabold text-slate-900">{formatRpShort(yearAvg)}</p>
+                </div>
+                <div className="bg-blue-50 rounded-2xl p-2">
+                  <p className="text-[10px] text-blue-500">Paling boros</p>
+                  <p className="text-[13px] font-extrabold text-blue-700 capitalize">
+                    {yearPeak.total > 0 ? `${yearPeak.label} • ${formatRpShort(yearPeak.total)}` : '—'}
+                  </p>
+                </div>
+              </div>
             </section>
 
             <section className="space-y-2">
@@ -1149,7 +1240,15 @@ export default function App() {
                 <input value={gName} onChange={(e) => setGName(e.target.value)} placeholder="Nama: Laptop, Dana darurat" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
                 <div className="flex gap-2">
                   <input value={gTarget} onChange={(e) => setGTarget(groupDigits(e.target.value))} inputMode="numeric" placeholder="5.000.000" className="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 font-bold" />
-                  <button onClick={saveGoal} className="bg-blue-600 text-white text-sm font-bold rounded-xl px-4">Tambah</button>
+                  <button onClick={saveGoal} className="bg-blue-600 text-white text-sm font-bold rounded-xl px-4">{editingGoalId ? 'Simpan' : 'Tambah'}</button>
+                  {editingGoalId && (
+                    <button
+                      onClick={() => { setEditingGoalId(null); setGName(''); setGTarget('') }}
+                      className="bg-slate-100 text-slate-600 text-sm font-semibold rounded-xl px-3"
+                    >
+                      Batal
+                    </button>
+                  )}
                 </div>
                 {gTarget && <p className="text-[11px] text-slate-400">= {formatRp(parseAmount(gTarget))}</p>}
               </div>
@@ -1161,7 +1260,10 @@ export default function App() {
                   <div key={g.id} className="bg-white border border-blue-100 shadow-sm rounded-2xl p-3">
                     <div className="flex justify-between items-center text-sm">
                       <span className="font-semibold text-slate-900 flex items-center gap-1.5"><Target size={14} className="text-blue-600" /> {g.name}</span>
-                      <button onClick={() => deleteGoal(g.id)} className="text-slate-400" aria-label="hapus target"><Trash2 size={14} /></button>
+                      <span className="flex items-center gap-1">
+                        <button onClick={() => openEditGoal(g)} className="text-slate-400 p-1" aria-label="ubah target"><Pencil size={14} /></button>
+                        <button onClick={() => deleteGoal(g.id)} className="text-slate-400 p-1" aria-label="hapus target"><Trash2 size={14} /></button>
+                      </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">{formatRp(g.currentAmount)} / {formatRp(g.targetAmount)} • {p}%</p>
                     <div className="h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
@@ -1180,7 +1282,20 @@ export default function App() {
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <p className="font-semibold text-sm text-slate-900">Pengeluaran rutin</p>
-                <button onClick={() => setShowRutinForm((v) => !v)} className="text-[11px] bg-blue-600 text-white font-bold rounded-full px-3 py-1.5">{showRutinForm ? 'Tutup' : '+ Tambah'}</button>
+                <button
+                  onClick={() => {
+                    if (showRutinForm) {
+                      setEditingRutinId(null)
+                      setRName('')
+                      setRAmount('')
+                      setRDay('1')
+                    }
+                    setShowRutinForm((v) => !v)
+                  }}
+                  className="text-[11px] bg-blue-600 text-white font-bold rounded-full px-3 py-1.5"
+                >
+                  {showRutinForm ? 'Tutup' : '+ Tambah'}
+                </button>
               </div>
               {showRutinForm && (
                 <div className="bg-white border border-blue-100 rounded-2xl p-3 space-y-2">
@@ -1200,7 +1315,15 @@ export default function App() {
                       <button key={p} onClick={() => setRPay(p)} className={`text-[11px] rounded-full px-2.5 py-1 border font-semibold ${rPay === p ? 'bg-slate-900 text-white' : 'border-slate-200 text-slate-500'}`}>{p}</button>
                     ))}
                   </div>
-                  <button onClick={saveRutin} className="w-full bg-blue-600 text-white text-sm font-bold rounded-xl py-2.5">Simpan rutin</button>
+                  <button onClick={saveRutin} className="w-full bg-blue-600 text-white text-sm font-bold rounded-xl py-2.5">{editingRutinId ? 'Simpan perubahan' : 'Simpan rutin'}</button>
+                  {editingRutinId && (
+                    <button
+                      onClick={() => { setEditingRutinId(null); setRName(''); setRAmount(''); setRDay('1'); setShowRutinForm(false) }}
+                      className="w-full bg-slate-100 text-slate-600 text-sm font-semibold rounded-xl py-2.5"
+                    >
+                      Batal
+                    </button>
+                  )}
                 </div>
               )}
               {recurrings.map((r) => {
@@ -1216,7 +1339,8 @@ export default function App() {
                     </div>
                     {!lunas && r.active && <button onClick={() => payRutin(r)} className="text-[11px] bg-blue-600 text-white font-bold rounded-full px-2.5 py-1.5">Catat</button>}
                     {!lunas && r.active && <button onClick={() => skipRutin(r)} className="text-[11px] text-slate-400 px-1">Lewati</button>}
-                    <button onClick={() => deleteRutin(r.id)} className="text-slate-400" aria-label="hapus rutin"><Trash2 size={14} /></button>
+                    <button onClick={() => openEditRutin(r)} className="text-slate-400 p-1" aria-label="ubah rutin"><Pencil size={14} /></button>
+                    <button onClick={() => deleteRutin(r.id)} className="text-slate-400 p-1" aria-label="hapus rutin"><Trash2 size={14} /></button>
                   </div>
                 )
               })}
