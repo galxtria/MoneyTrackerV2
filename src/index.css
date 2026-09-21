@@ -81,10 +81,33 @@ input[type="number"] {
 button { transition: transform 0.12s ease; }
 button:active { transform: scale(0.96); }
 
-/* Sheet tambah/ubah: bisa scroll biar ikut keyboard bawaan HP */
+/* Sheet tambah/ubah: lama, dipertahankan biar tidak ada yang menggantung.
+   Sekarang form pakai BottomSheet (header + footer sticky, konten scroll). */
 .add-sheet {
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Bottom sheet rasa native */
+.bottom-sheet-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.bottom-sheet-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* HP berasa app beneran: cegah pull-to-refresh & teks ke-select saat drag */
+[role="dialog"] {
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+[role="dialog"] input,
+[role="dialog"] select,
+[role="dialog"] textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 @media (prefers-reduced-motion: reduce) {

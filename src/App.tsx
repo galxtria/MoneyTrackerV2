@@ -28,6 +28,7 @@ import {
 import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
 import ScanSheet from './components/ScanSheet'
+import BottomSheet from './components/BottomSheet'
 import Onboarding from './components/Onboarding'
 import ConfirmSheet, { type ConfirmReq } from './components/ConfirmSheet'
 import { CATEGORIES, PAYMENTS, categoryById } from './lib/categories'
@@ -1556,20 +1557,34 @@ export default function App() {
       )}
 
       {showAdd && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/40 flex items-end sm:items-center justify-center"
-          onClick={closeAdd}
-        >          <div className="add-sheet w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[92dvh] overflow-y-auto anim-sheet-up" onClick={(e) => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
-            <div className="flex items-center justify-between gap-2 mb-4">
+        <BottomSheet
+          onClose={closeAdd}
+          header={
+            <div className="flex items-center justify-between gap-2">
               <p className="font-bold text-[17px] text-slate-900">{editingExpense ? 'Ubah pengeluaran' : 'Catat pengeluaran'}</p>
-              {!editingExpense && (
-                <button onClick={() => setShowScan(true)} className="shrink-0 text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-3 py-2 flex items-center gap-1.5">
-                  <ScanLine size={15} /> Scan struk
+              <div className="flex items-center gap-1.5 shrink-0">
+                {!editingExpense && (
+                  <button onClick={() => setShowScan(true)} className="text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-3 py-2 flex items-center gap-1.5">
+                    <ScanLine size={15} /> Scan struk
+                  </button>
+                )}
+                <button onClick={closeAdd} aria-label="Tutup" className="w-8 h-8 grid place-items-center rounded-full bg-slate-100 text-slate-500">
+                  ✕
                 </button>
-              )}
+              </div>
             </div>
-
+          }
+          footer={
+            editingExpense ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={saveExpense} className="bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px] shadow-lg shadow-blue-200">Simpan</button>
+                <button onClick={duplicateExpense} className="bg-blue-50 text-blue-700 font-bold rounded-2xl py-3.5 text-sm">Duplikat</button>
+              </div>
+            ) : (
+              <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px] shadow-lg shadow-blue-200">{`Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
+            )
+          }
+        >
             <label className="text-[11px] font-semibold text-slate-400">NOMINAL</label>
             <div className="relative mt-1 mb-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Rp</span>
@@ -1618,7 +1633,7 @@ export default function App() {
 
             <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = '' }} />
             {photo ? (
-              <div className="flex items-center gap-2 mb-3 bg-slate-50 border border-slate-200 rounded-2xl p-1.5">
+              <div className="flex items-center gap-2 mb-1 bg-slate-50 border border-slate-200 rounded-2xl p-1.5">
                 <img src={photo} alt="Bukti" className="w-12 h-12 object-cover rounded-xl shrink-0" />
                 <p className="flex-1 text-xs font-semibold text-slate-600">Foto struk terlampir</p>
                 <button onClick={() => setPhoto(undefined)} className="text-[11px] font-bold text-red-600 bg-red-50 rounded-full px-3 py-1.5 shrink-0">
@@ -1626,20 +1641,11 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <button onClick={() => photoRef.current?.click()} className="w-full mb-4 text-slate-400 text-sm font-medium rounded-2xl py-2.5 flex items-center justify-center gap-1.5">
+              <button onClick={() => photoRef.current?.click()} className="w-full text-slate-400 text-sm font-medium rounded-2xl py-2.5 flex items-center justify-center gap-1.5">
                 <Camera size={15} /> Tambah foto (opsional)
               </button>
             )}
-            {editingExpense ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={saveExpense} className="bg-blue-600 text-white font-bold rounded-2xl py-3 text-[15px]">Simpan</button>
-                <button onClick={duplicateExpense} className="bg-blue-50 text-blue-700 font-bold rounded-2xl py-3 text-sm">Duplikat</button>
-              </div>
-            ) : (
-              <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px]">{`Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
-            )}
-          </div>
-        </div>
+        </BottomSheet>
       )}
     </div>
   )

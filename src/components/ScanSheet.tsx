@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Camera, Loader2, ScanLine } from 'lucide-react'
+import BottomSheet from './BottomSheet'
 import { type Category } from '../lib/categories'
 import { formatRp, todayStr } from '../lib/format'
 import { fileToDataURL } from '../lib/photo'
@@ -88,15 +89,33 @@ export default function ScanSheet({ categories, onUse, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 bg-slate-900/50 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] px-5 pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] max-h-[92dvh] overflow-y-auto anim-sheet-up"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
-        <p className="font-bold text-lg text-slate-900 flex items-center gap-2">
-          <ScanLine size={19} className="text-blue-600" /> Scan struk
-        </p>
+    <BottomSheet
+      onClose={onClose}
+      zIndex="z-40"
+      header={
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-bold text-lg text-slate-900 flex items-center gap-2">
+            <ScanLine size={19} className="text-blue-600" /> Scan struk
+          </p>
+          <button onClick={onClose} aria-label="Tutup" className="w-8 h-8 grid place-items-center rounded-full bg-slate-100 text-slate-500 shrink-0">
+            ✕
+          </button>
+        </div>
+      }
+      footer={
+        phase === 'done' ? (
+          <div>
+            <button
+              onClick={() => total > 0 && onUse({ amount: total, date, note: merchant.trim(), categoryId: cat, photo: scanPhoto })}
+              className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px] shadow-lg shadow-blue-200"
+            >
+              Pakai • {formatRp(total)}
+            </button>
+            <p className="text-[11px] text-slate-400 text-center mt-2">Masih bisa diubah di layar berikutnya sebelum disimpan.</p>
+          </div>
+        ) : undefined
+      }
+    >
         <p className="text-xs text-slate-400 mb-3">Foto struk → otomatis terisi → kamu cek dulu baru simpan.</p>
 
         <input
@@ -185,13 +204,6 @@ export default function ScanSheet({ categories, onUse, onClose }: Props) {
                 })}
               </div>
             </div>
-            <button
-              onClick={() => total > 0 && onUse({ amount: total, date, note: merchant.trim(), categoryId: cat, photo: scanPhoto })}
-              className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px]"
-            >
-              Pakai • {formatRp(total)}
-            </button>
-            <p className="text-[11px] text-slate-400 text-center">Masih bisa diubah di layar berikutnya sebelum disimpan.</p>
           </div>
         )}
 
@@ -209,7 +221,6 @@ export default function ScanSheet({ categories, onUse, onClose }: Props) {
           </div>
         )}
 
-      </div>
-    </div>
+      </BottomSheet>
   )
 }
