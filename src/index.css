@@ -81,6 +81,16 @@ input[type="number"] {
 button { transition: transform 0.12s ease; }
 button:active { transform: scale(0.96); }
 
+/* Sheet tambah/ubah: tidak scroll di layar tinggi; fallback scroll di layar pendek */
+.add-sheet {
+  overflow: hidden;
+}
+@media (max-height: 720px) {
+  .add-sheet {
+    overflow-y: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
