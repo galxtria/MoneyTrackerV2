@@ -29,6 +29,19 @@ export function parseAmount(raw: string): number {
   return digits ? parseInt(digits, 10) : 0
 }
 
+// Format ringkas buat sumbu chart: 45000 -> Rp45rb, 1500000 -> Rp1,5jt
+export function formatRpShort(n: number): string {
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000
+    return 'Rp' + (Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ',')) + 'jt'
+  }
+  if (n >= 1000) {
+    const v = n / 1000
+    return 'Rp' + (Number.isInteger(v) ? String(v) : v.toFixed(1).replace('.', ',')) + 'rb'
+  }
+  return 'Rp' + n
+}
+
 // Format live saat user mengetik: "500000" -> "500.000"
 export function groupDigits(raw: string): string {
   const digits = raw.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')

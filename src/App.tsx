@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownUp,
   Bell,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +23,7 @@ import {
   User,
   Wallet,
 } from 'lucide-react'
-import { Bar, BarChart, Cell, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
+import { Bar, BarChart, Cell, LabelList, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
 import { CATEGORIES, PAYMENTS, categoryById } from './lib/categories'
@@ -36,7 +37,7 @@ import {
   type Recurring,
   type SavingGoal,
 } from './lib/db'
-import { formatRp, groupDigits, monthKey, parseAmount, todayStr } from './lib/format'
+import { formatRp, formatRpShort, groupDigits, monthKey, parseAmount, todayStr } from './lib/format'
 
 type Tab = 'home' | 'expenses' | 'stats' | 'goals'
 
@@ -55,6 +56,19 @@ function mondayOf(iso: string): Date {
   const dow = (dt.getDay() + 6) % 7
   dt.setDate(dt.getDate() - dow)
   return dt
+}
+
+// Tooltip chart: hanya muncul kalau bar ada isinya (Rp0 tidak ditampilkan)
+function ChartTip(props: any) {
+  const v = Number(props?.payload?.[0]?.value ?? 0)
+  if (!props?.active || v <= 0) return null
+  const day = props?.payload?.[0]?.payload?.day ?? ''
+  return (
+    <div className="bg-slate-900 text-white rounded-xl px-3 py-2 shadow-lg">
+      <p className="text-[10px] text-slate-300">{day}</p>
+      <p className="text-sm font-bold">{formatRp(v)}</p>
+    </div>
+  )
 }
 
 export default function App() {
@@ -162,16 +176,27 @@ export default function App() {
   }, [viewed])
 
   const last7 = useMemo(() => {
-    const out: { label: string; total: number; today: boolean }[] = []
+    const out: { label: string; day: string; total: number; today: boolean }[] = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const total = all.filter((e) => e.date === iso).reduce((s, e) => s + e.amount, 0)
-      out.push({ label: d.toLocaleDateString('id-ID', { weekday: 'narrow' }), total, today: i === 0 })
+      out.push({
+        label: d.toLocaleDateString('id-ID', { weekday: 'narrow' }),
+        day: d.toLocaleDateString('id-ID', { weekday: 'long' }),
+        total,
+        today: i === 0,
+      })
     }
     return out
   }, [all])
+
+  const weekStats = useMemo(() => {
+    const total = last7.reduce((s, d) => s + d.total, 0)
+    const max = Math.max(0, ...last7.map((d) => d.total))
+    return { total, max, avg: Math.round(total / 7) }
+  }, [last7])
 
   const byCategory = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>()
@@ -186,9 +211,10 @@ export default function App() {
       .sort((a, b) => b.total - a.total)
   }, [viewed, catBudgets])
 
-  // Insight otomatis
+  // Insight otomatis — dihitung dari catatanmu, bukan tebakan
   const insights = useMemo(() => {
-    const out: { icon: 'up' | 'down' | 'star' | 'warn'; text: string }[] = []
+    type Icon = 'up' | 'down' | 'star' | 'warn' | 'day' | 'check'
+    const out: { icon: Icon; text: string }[] = []
     const sumRange = (from: number, to: number) => {
       let s = 0
       for (let i = from; i <= to; i++) {
@@ -199,6 +225,22 @@ export default function App() {
       }
       return s
     }
+    // 1. Kategori over budget = prioritas tertinggi
+    const over = byCategory.filter((c) => c.limit > 0 && c.total > c.limit)
+    if (over.length > 0) {
+      out.push({ icon: 'warn', text: `${over.length} kategori over budget: ${over.slice(0, 2).map((c) => `${c.name} +${formatRp(c.total - c.limit)}`).join(', ')}.` })
+    }
+    // 2. Proyeksi akhir bulan dari tempo belanja saat ini
+    if (budget > 0 && dayOfMonth >= 2 && totalMonth > 0) {
+      const proj = avg * daysInMonth
+      const pp = Math.round((proj / budget) * 100)
+      out.push(
+        pp > 100
+          ? { icon: 'warn', text: `Tempo ini akhir bulan tembus ${formatRp(proj)} (${pp}% dari budget). Rem dikit ya.` }
+          : { icon: 'check', text: `Tempo aman: proyeksi akhir bulan ${formatRp(proj)} (${pp}% budget).` },
+      )
+    }
+    // 3. Naik/turun vs 7 hari sebelumnya
     const w0 = sumRange(0, 6)
     const w1 = sumRange(7, 13)
     if (w1 > 0 && w0 > 0) {
@@ -210,16 +252,29 @@ export default function App() {
         })
       }
     }
+    // 4. Kategori porsi terbesar
     if (byCategory.length > 0 && totalViewed > 0) {
       const top = byCategory[0]
       out.push({ icon: 'star', text: `${top.name} porsi terbesar (${Math.round((top.total / totalViewed) * 100)}%) • ${formatRp(top.total)}.` })
     }
-    const over = byCategory.filter((c) => c.limit > 0 && c.total > c.limit)
-    if (over.length > 0) {
-      out.push({ icon: 'warn', text: `${over.length} kategori over budget: ${over.slice(0, 2).map((c) => `${c.name} +${formatRp(c.total - c.limit)}`).join(', ')}.` })
+    // 5. Hari paling boros minggu ini
+    const peak = last7.reduce((a, b) => (b.total > a.total ? b : a), last7[0])
+    if (peak && peak.total > 0) {
+      out.push({ icon: 'day', text: `${peak.day} paling boros minggu ini (${formatRp(peak.total)}).` })
     }
-    return out.slice(0, 3)
-  }, [all, byCategory, totalViewed])
+    // 6. Status hari ini vs jatah
+    if (budget > 0) {
+      out.push(
+        totalToday <= sisaHarian
+          ? { icon: 'check', text: `Hari ini masih dalam jatah (sisa ${formatRp(todayAllowance)}).` }
+          : { icon: 'warn', text: `Hari ini lewat jatah ${formatRp(totalToday - sisaHarian)}. Besok rem ya.` },
+      )
+    }
+    if (out.length === 0) {
+      out.push({ icon: 'star', text: 'Catat minimal 3 pengeluaran biar insight otomatis muncul.' })
+    }
+    return out.slice(0, 4)
+  }, [all, byCategory, totalViewed, budget, dayOfMonth, totalMonth, avg, daysInMonth, last7, totalToday, sisaHarian, todayAllowance])
 
   const dueRutin = useMemo(
     () => recurrings.filter((r) => r.active && r.lastPaidMonth !== mkNow).sort((a, b) => a.dayOfMonth - b.dayOfMonth),
@@ -531,22 +586,23 @@ export default function App() {
             </section>
 
             {/* Insight */}
-            {insights.length > 0 && (
-              <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
-                <p className="font-semibold text-sm text-slate-900 flex items-center gap-1.5"><Sparkles size={15} className="text-blue-600" /> Insight buat kamu</p>
-                <ul className="mt-2 space-y-1.5">
-                  {insights.map((ins, i) => (
-                    <li key={i} className="text-xs text-slate-600 flex items-start gap-2 bg-blue-50/60 rounded-2xl px-3 py-2">
-                      {ins.icon === 'up' ? <TrendingUp size={14} className="text-blue-600 mt-0.5 shrink-0" />
-                        : ins.icon === 'down' ? <TrendingDown size={14} className="text-blue-600 mt-0.5 shrink-0" />
-                          : ins.icon === 'warn' ? <TriangleAlert size={14} className="text-red-500 mt-0.5 shrink-0" />
-                            : <Sparkles size={14} className="text-blue-600 mt-0.5 shrink-0" />}
-                      <span>{ins.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+            <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
+              <p className="font-semibold text-sm text-slate-900 flex items-center gap-1.5"><Sparkles size={15} className="text-blue-600" /> Insight buat kamu</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Dihitung otomatis dari catatanmu, update tiap ada transaksi baru.</p>
+              <ul className="mt-2 space-y-1.5">
+                {insights.map((ins, i) => (
+                  <li key={i} className="text-xs text-slate-600 flex items-start gap-2 bg-blue-50/60 rounded-2xl px-3 py-2">
+                    {ins.icon === 'up' ? <TrendingUp size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                      : ins.icon === 'down' ? <TrendingDown size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                        : ins.icon === 'warn' ? <TriangleAlert size={14} className="text-red-500 mt-0.5 shrink-0" />
+                          : ins.icon === 'day' ? <CalendarDays size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                            : ins.icon === 'check' ? <Check size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                              : <Sparkles size={14} className="text-blue-600 mt-0.5 shrink-0" />}
+                    <span>{ins.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
 
             {/* Reminder rutin kompak */}
             {dueRutin.length > 0 && (
@@ -560,24 +616,33 @@ export default function App() {
               </section>
             )}
 
-            {/* Analytics */}
+            {/* Analytics — total per hari 7 hari terakhir (paling kanan = hari ini) */}
             <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between">
                 <p className="font-semibold text-sm text-slate-900">Analytics</p>
-                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 rounded-full px-2.5 py-1">7 hari</span>
+                <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 rounded-full px-2.5 py-1">7 hari • {formatRpShort(weekStats.total)}</span>
               </div>
-              <div className="h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last7} barCategoryGap="28%">
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: '#94a3b8' }} />
-                    <Tooltip formatter={(v) => formatRp(Number(v))} />
-                    <Bar dataKey="total" radius={[7, 7, 3, 3]}>
-                      {last7.map((d, i) => (
-                        <Cell key={i} fill={d.today ? '#1d4ed8' : '#bfdbfe'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <p className="text-[11px] text-slate-400 mt-0.5">Tiap bar = total keluar 1 hari • bar biru tua = hari ini • angka sudah tertulis di atas bar</p>
+              <div className="h-52 mt-1">
+                {weekStats.max > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={last7} barCategoryGap="30%" margin={{ top: 14, right: 0, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} tick={{ fill: '#94a3b8' }} />
+                      <YAxis width={40} tickLine={false} axisLine={false} fontSize={10} tick={{ fill: '#94a3b8' }} tickFormatter={(v: number) => formatRpShort(v)} />
+                      <Tooltip content={<ChartTip />} cursor={{ fill: '#eff6ff' }} />
+                      <Bar dataKey="total" radius={[7, 7, 3, 3]}>
+                        {last7.map((d, i) => (
+                          <Cell key={i} fill={d.today ? '#1d4ed8' : '#bfdbfe'} />
+                        ))}
+                        <LabelList dataKey="total" position="top" fontSize={9} fill="#64748b" formatter={(v) => (Number(v) > 0 ? formatRpShort(Number(v)) : '')} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full grid place-items-center text-center">
+                    <p className="text-xs text-slate-400">Belum ada pengeluaran 7 hari terakhir.<br />Tap + buat catat.</p>
+                  </div>
+                )}
               </div>
             </section>
 
