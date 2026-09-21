@@ -805,7 +805,7 @@ export default function App() {
         </div>
       )}
       {/* Header ala mockup */}
-      <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pt-3 pb-2 flex items-center gap-2.5">
+      <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top))] flex items-center gap-2.5">
         <img src="/logo.svg" alt="Logo MoneyTracker" className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
         <p className="flex-1 font-bold text-[15px] text-slate-900 truncate">MoneyTracker</p>
         <span className="text-[11px] font-bold text-blue-700 bg-white border border-blue-100 rounded-full pl-2 pr-2.5 py-1 capitalize shrink-0 flex items-center gap-1 max-w-[150px] truncate">
@@ -1487,11 +1487,11 @@ export default function App() {
 
       {confirmReq && <ConfirmSheet req={confirmReq} onClose={() => setConfirmReq(null)} />}
 
-      {!onboarded && <Onboarding onDone={doneOnboarding} />}
+      {!onboarded && splashPhase === 'gone' && <Onboarding onDone={doneOnboarding} />}
 
       {/* Toast urungkan hapus */}
       {showUndo && (
-        <div className="fixed bottom-24 inset-x-0 z-30 flex justify-center px-6 anim-rise">
+        <div className="fixed bottom-32 inset-x-0 z-30 flex justify-center px-6 anim-rise">
           <div className="bg-slate-900 text-white rounded-full pl-4 pr-2 py-2 flex items-center gap-3 shadow-xl text-sm">
             <span className="text-[13px]">Pengeluaran dihapus</span>
             <button onClick={undoDelete} className="bg-blue-600 text-[13px] font-bold rounded-full px-3 py-1.5">Urungkan</button>
@@ -1501,7 +1501,7 @@ export default function App() {
 
       {/* Bottom nav ala mockup */}
       <nav className="fixed bottom-0 inset-x-0 z-20">
-        <div className="max-w-md mx-auto px-6 pb-5">
+        <div className="max-w-md mx-auto px-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
           <div className="bg-white rounded-full shadow-xl border border-blue-50 flex items-center justify-around px-3 py-2.5">
             <button onClick={() => setTab('home')} className={`p-2 rounded-full ${tab === 'home' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`} aria-label="home"><Home size={21} /></button>
             <button onClick={() => setTab('expenses')} className={`p-2 rounded-full ${tab === 'expenses' ? 'text-blue-600 bg-blue-50' : 'text-slate-400'}`} aria-label="expenses"><ReceiptText size={21} /></button>
