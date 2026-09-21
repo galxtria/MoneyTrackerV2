@@ -11,6 +11,7 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react'
+import { CUSTOM_ICONS, customCatById } from './customCats'
 
 export interface Category {
   id: string
@@ -37,5 +38,11 @@ export const CATEGORIES: Category[] = [
 export const PAYMENTS = ['Cash', 'QRIS', 'GoPay', 'DANA', 'OVO', 'Debit'] as const
 
 export function categoryById(id: string): Category {
-  return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1]
+  const builtin = CATEGORIES.find((c) => c.id === id)
+  if (builtin) return builtin
+  const custom = customCatById(id)
+  if (custom) {
+    return { id: custom.id, name: custom.name, Icon: CUSTOM_ICONS[custom.iconKey] ?? Package, color: custom.color }
+  }
+  return CATEGORIES[CATEGORIES.length - 1]
 }

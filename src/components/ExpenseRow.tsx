@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Camera, Trash2 } from 'lucide-react'
 import { categoryById } from '../lib/categories'
 import type { Expense } from '../lib/db'
 import { formatRp, prettyDate } from '../lib/format'
@@ -122,7 +122,10 @@ export default function ExpenseRow({ e, onTap, onDelete }: Props) {
             {prettyDate(e.date)} • {e.payment} {e.note ? `• ${e.note}` : ''}
           </p>
         </div>
-        <span className="text-[13px] font-bold text-slate-900 shrink-0">-{formatRp(e.amount)}</span>
+        <span className="text-[13px] font-bold text-slate-900 shrink-0 flex items-center gap-1">
+          {e.photo ? <Camera size={13} className="text-blue-500" /> : null}
+          -{formatRp(e.amount)}
+        </span>
       </div>
     </div>
   )

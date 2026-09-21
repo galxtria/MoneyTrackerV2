@@ -8,6 +8,7 @@ export interface Expense {
   date: string // YYYY-MM-DD
   note?: string
   createdAt: number
+  photo?: string // dataURL JPEG kecil (bukti struk), opsional
 }
 
 export interface Setting {
@@ -40,12 +41,20 @@ export interface SavingGoal {
   createdAt: number
 }
 
+export interface CustomCat {
+  id: string // 'c_<timestamp>'
+  name: string
+  iconKey: string
+  color: string
+}
+
 class MoneyDB extends Dexie {
   expenses!: Table<Expense, number>
   settings!: Table<Setting, string>
   categoryBudgets!: Table<CategoryBudget, string>
   recurrings!: Table<Recurring, number>
   goals!: Table<SavingGoal, number>
+  customCats!: Table<CustomCat, string>
 
   constructor() {
     super('moneytracker-v2')
@@ -73,6 +82,15 @@ class MoneyDB extends Dexie {
       categoryBudgets: 'categoryId',
       recurrings: '++id, active, dayOfMonth',
       goals: '++id, createdAt',
+    })
+    // v5: tambah kategori custom (photo nempel di expenses tanpa migrasi)
+    this.version(5).stores({
+      expenses: '++id, date, categoryId, createdAt',
+      settings: 'key',
+      categoryBudgets: 'categoryId',
+      recurrings: '++id, active, dayOfMonth',
+      goals: '++id, createdAt',
+      customCats: 'id',
     })
   }
 }

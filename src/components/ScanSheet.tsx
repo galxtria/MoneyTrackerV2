@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { Camera, Loader2, ScanLine } from 'lucide-react'
-import { CATEGORIES } from '../lib/categories'
+import { type Category } from '../lib/categories'
 import { formatRp, todayStr } from '../lib/format'
+import { fileToDataURL } from '../lib/photo'
 import { parseReceiptText } from '../lib/receipt'
 
 export interface ScanUse {
@@ -9,9 +10,11 @@ export interface ScanUse {
   date: string
   note: string
   categoryId: string
+  photo?: string
 }
 
 interface Props {
+  categories: Category[]
   onUse: (d: ScanUse) => void
   onClose: () => void
 }
@@ -19,8 +22,9 @@ interface Props {
 type Phase = 'pick' | 'ready' | 'working' | 'done' | 'error'
 
 // Foto struk -> OCR on-device -> konfirmasi -> isi form. Tidak pernah simpan otomatis.
-export default function ScanSheet({ onUse, onClose }: Props) {
+export default function ScanSheet({ categories, onUse, onClose }: Props) {
   const [img, setImg] = useState<string | null>(null)
+  const [scanPhoto, setScanPhoto] = useState<string | undefined>(undefined)
   const [phase, setPhase] = useState<Phase>('pick')
   const [progress, setProgress] = useState(0)
   const [status, setStatus] = useState('')
@@ -38,6 +42,8 @@ export default function ScanSheet({ onUse, onClose }: Props) {
     setImg(URL.createObjectURL(f))
     setPhase('ready')
     setErr('')
+    // simpan versi kecil foto buat bukti nempel di transaksi
+    fileToDataURL(f).then(setScanPhoto).catch(() => setScanPhoto(undefined))
   }
 
   async function runOCR() {
@@ -169,7 +175,7 @@ export default function ScanSheet({ onUse, onClose }: Props) {
             <div>
               <label className="text-[11px] font-semibold text-slate-400">KATEGORI TEBAKAN</label>
               <div className="flex gap-1.5 overflow-x-auto pb-1 mt-1">
-                {CATEGORIES.map((c) => {
+                {categories.map((c) => {
                   const CI = c.Icon
                   return (
                     <button key={c.id} onClick={() => setCat(c.id)} className={`shrink-0 text-[11px] px-3 py-1.5 rounded-full border font-semibold flex items-center gap-1 ${cat === c.id ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500'}`}>
@@ -180,7 +186,7 @@ export default function ScanSheet({ onUse, onClose }: Props) {
               </div>
             </div>
             <button
-              onClick={() => total > 0 && onUse({ amount: total, date, note: merchant.trim(), categoryId: cat })}
+              onClick={() => total > 0 && onUse({ amount: total, date, note: merchant.trim(), categoryId: cat, photo: scanPhoto })}
               className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px]"
             >
               Pakai • {formatRp(total)}

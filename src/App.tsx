@@ -3,6 +3,7 @@ import {
   ArrowDownUp,
   Bell,
   CalendarDays,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   PieChart,
   PiggyBank,
   Plus,
+  Package,
   ReceiptText,
   ScanLine,
   Search,
@@ -28,12 +30,16 @@ import Heatmap from './components/Heatmap'
 import ExpenseRow from './components/ExpenseRow'
 import ScanSheet from './components/ScanSheet'
 import { CATEGORIES, PAYMENTS, categoryById } from './lib/categories'
+import { CUSTOM_COLORS, CUSTOM_ICONS, registerCustomCats } from './lib/customCats'
+import { exportBackup, importBackup } from './lib/backup'
+import { fileToDataURL } from './lib/photo'
 import {
   db,
   getCategoryBudgets,
   getMonthlyBudget,
   setCategoryBudget,
   setMonthlyBudget,
+  type CustomCat,
   type Expense,
   type Recurring,
   type SavingGoal,
@@ -79,6 +85,7 @@ export default function App() {
   const [catBudgets, setCatBudgets] = useState<Record<string, number>>({})
   const [recurrings, setRecurrings] = useState<Recurring[]>([])
   const [goals, setGoals] = useState<SavingGoal[]>([])
+  const [customCats, setCustomCats] = useState<CustomCat[]>([])
   const [budgetInput, setBudgetInput] = useState('')
   const [showBudgetEdit, setShowBudgetEdit] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
@@ -95,6 +102,18 @@ export default function App() {
   const [payment, setPayment] = useState<string>('QRIS')
   const [date, setDate] = useState(todayStr())
   const [note, setNote] = useState('')
+  const [photo, setPhoto] = useState<string | undefined>(undefined)
+  const photoRef = useRef<HTMLInputElement>(null)
+
+  // kategori custom: form
+  const [showCatForm, setShowCatForm] = useState(false)
+  const [ncName, setNcName] = useState('')
+  const [ncIcon, setNcIcon] = useState('gift')
+  const [ncColor, setNcColor] = useState(CUSTOM_COLORS[0])
+
+  // backup/restore
+  const [backupMsg, setBackupMsg] = useState('')
+  const restoreRef = useRef<HTMLInputElement>(null)
 
   // expenses: search + filter + kalender
   const [query, setQuery] = useState('')
@@ -131,14 +150,17 @@ export default function App() {
     const [b, cb] = await Promise.all([getMonthlyBudget(), getCategoryBudgets()])
     setBudget(b)
     setCatBudgets(cb)
-    const [rows, ruts, gls] = await Promise.all([
+    const [rows, ruts, gls, customs] = await Promise.all([
       db.expenses.orderBy('createdAt').reverse().limit(800).toArray(),
       db.recurrings.orderBy('dayOfMonth').toArray(),
       db.goals.orderBy('createdAt').toArray(),
+      db.customCats.toArray(),
     ])
+    registerCustomCats(customs)
     setAll(rows)
     setRecurrings(ruts)
     setGoals(gls)
+    setCustomCats(customs)
   }
 
   useEffect(() => {
@@ -215,6 +237,50 @@ export default function App() {
       .sort((a, b) => b.total - a.total)
   }, [viewed, catBudgets])
 
+  // Semua kategori = bawaan + custom
+  const cats = useMemo(
+    () => [
+      ...CATEGORIES,
+      ...customCats.map((c) => ({
+        id: c.id,
+        name: c.name,
+        Icon: CUSTOM_ICONS[c.iconKey] ?? Package,
+        color: c.color,
+      })),
+    ],
+    [customCats],
+  )
+
+  // Banding bulan lalu (tab Stats)
+  const prevKey = shiftMonth(viewMonth, -1)
+  const prevExpenses = useMemo(() => all.filter((e) => e.date.startsWith(prevKey)), [all, prevKey])
+  const prevTotal = useMemo(() => prevExpenses.reduce((s, e) => s + e.amount, 0), [prevExpenses])
+  const movers = useMemo(() => {
+    const map = new Map<string, { id: string; cur: number; last: number }>()
+    for (const e of viewed) {
+      const m = map.get(e.categoryId) ?? { id: e.categoryId, cur: 0, last: 0 }
+      m.cur += e.amount
+      map.set(e.categoryId, m)
+    }
+    for (const e of prevExpenses) {
+      const m = map.get(e.categoryId) ?? { id: e.categoryId, cur: 0, last: 0 }
+      m.last += e.amount
+      map.set(e.categoryId, m)
+    }
+    return [...map.values()]
+      .map((m) => ({ ...m, ...categoryById(m.id), diff: m.cur - m.last }))
+      .filter((m) => m.cur > 0 || m.last > 0)
+      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+      .slice(0, 6)
+  }, [viewed, prevExpenses])
+
+  // Total bulan lalu dari bulan berjalan (buat insight)
+  const prevMkNow = shiftMonth(mkNow, -1)
+  const prevMonthTotal = useMemo(
+    () => all.filter((e) => e.date.startsWith(prevMkNow)).reduce((s, e) => s + e.amount, 0),
+    [all, prevMkNow],
+  )
+
   // Insight otomatis — dihitung dari catatanmu, bukan tebakan
   const insights = useMemo(() => {
     type Icon = 'up' | 'down' | 'star' | 'warn' | 'day' | 'check'
@@ -244,7 +310,17 @@ export default function App() {
           : { icon: 'check', text: `Tempo aman: proyeksi akhir bulan ${formatRp(proj)} (${pp}% budget).` },
       )
     }
-    // 3. Naik/turun vs 7 hari sebelumnya
+    // 3. Bulan ini vs bulan lalu
+    if (prevMonthTotal > 0 && totalMonth > 0) {
+      const ch = Math.round(((totalMonth - prevMonthTotal) / prevMonthTotal) * 100)
+      if (Math.abs(ch) >= 15) {
+        out.push({
+          icon: ch > 0 ? 'up' : 'down',
+          text: `Bulan ini ${ch > 0 ? 'lebih boros' : 'lebih hemat'} ${Math.abs(ch)}% dibanding bulan lalu (${formatRp(prevMonthTotal)}).`,
+        })
+      }
+    }
+    // 4. Naik/turun vs 7 hari sebelumnya
     const w0 = sumRange(0, 6)
     const w1 = sumRange(7, 13)
     if (w1 > 0 && w0 > 0) {
@@ -278,7 +354,7 @@ export default function App() {
       out.push({ icon: 'star', text: 'Catat minimal 3 pengeluaran biar insight otomatis muncul.' })
     }
     return out.slice(0, 4)
-  }, [all, byCategory, totalViewed, budget, dayOfMonth, totalMonth, avg, daysInMonth, last7, totalToday, sisaHarian, todayAllowance])
+  }, [all, byCategory, totalViewed, budget, dayOfMonth, totalMonth, avg, daysInMonth, last7, totalToday, sisaHarian, todayAllowance, prevMonthTotal])
 
   const dueRutin = useMemo(
     () => recurrings.filter((r) => r.active && r.lastPaidMonth !== mkNow).sort((a, b) => a.dayOfMonth - b.dayOfMonth),
@@ -349,6 +425,7 @@ export default function App() {
     setAmountRaw('')
     setNote('')
     setDate(todayStr())
+    setPhoto(undefined)
   }
 
   function openEdit(e: Expense) {
@@ -358,7 +435,17 @@ export default function App() {
     setPayment(e.payment)
     setDate(e.date)
     setNote(e.note ?? '')
+    setPhoto(e.photo)
     setShowAdd(true)
+  }
+
+  async function attachPhoto(f: File | undefined) {
+    if (!f) return
+    try {
+      setPhoto(await fileToDataURL(f))
+    } catch {
+      alert('Foto gagal dibaca. Coba foto lain.')
+    }
   }
 
   async function saveExpense() {
@@ -375,9 +462,10 @@ export default function App() {
           payment,
           date,
           note: note.trim(),
+          photo: photo ?? '',
         })
       } else {
-        await db.expenses.add({ amount, categoryId: catId, payment, date, note: note.trim(), createdAt: Date.now() })
+        await db.expenses.add({ amount, categoryId: catId, payment, date, note: note.trim(), photo, createdAt: Date.now() })
       }
     } catch (err) {
       alert('Gagal menyimpan. Coba lagi. (' + (err instanceof Error ? err.message : String(err)) + ')')
@@ -397,7 +485,7 @@ export default function App() {
 
   async function duplicateExpense() {
     if (!editingExpense) return
-    const { id: _drop, ...rest } = editingExpense
+    const { id: _drop, photo: _dropPhoto, ...rest } = editingExpense
     await db.expenses.add({ ...rest, date: todayStr(), createdAt: Date.now() })
     closeAdd()
     await refresh()
@@ -434,6 +522,55 @@ export default function App() {
     setEditingCat(null)
     setEditingVal('')
     await refresh()
+  }
+
+  async function saveCustomCat() {
+    const name = ncName.trim().slice(0, 20)
+    if (!name) {
+      alert('Isi nama kategori dulu.')
+      return
+    }
+    await db.customCats.put({ id: `c_${Date.now()}`, name, iconKey: ncIcon, color: ncColor })
+    setNcName('')
+    setNcIcon('gift')
+    setNcColor(CUSTOM_COLORS[0])
+    setShowCatForm(false)
+    await refresh()
+  }
+
+  async function deleteCustomCat(id: string, name: string) {
+    if (!confirm(`Hapus kategori "${name}"? Transaksinya dipindah ke Lainnya.`)) return
+    await db.transaction('rw', [db.expenses, db.categoryBudgets, db.customCats], async () => {
+      await db.expenses.where('categoryId').equals(id).modify({ categoryId: 'lainnya' })
+      await db.categoryBudgets.delete(id)
+      await db.customCats.delete(id)
+    })
+    if (catId === id) setCatId('makan')
+    if (filterCat === id) setFilterCat('semua')
+    await refresh()
+  }
+
+  async function doBackup() {
+    try {
+      const { name, size } = await exportBackup()
+      setBackupMsg(`Tersimpan ${name} (${Math.round(size / 1024)} KB). Simpan file ini baik-baik.`)
+    } catch {
+      setBackupMsg('Gagal membuat backup.')
+    }
+    window.setTimeout(() => setBackupMsg(''), 6000)
+  }
+
+  async function doRestore(f: File | undefined) {
+    if (!f) return
+    if (!confirm('Restore MENGGANTIKAN semua data saat ini dengan isi file. Backup dulu kalau ragu. Lanjut?')) return
+    try {
+      const { expenses } = await importBackup(f)
+      setBackupMsg(`Restore berhasil: ${expenses} transaksi dikembalikan.`)
+      await refresh()
+    } catch (err) {
+      setBackupMsg(err instanceof Error ? err.message : 'File tidak valid.')
+    }
+    window.setTimeout(() => setBackupMsg(''), 6000)
   }
 
   async function exportExcelFile() {
@@ -763,7 +900,7 @@ export default function App() {
               </select>
               <div className="flex gap-1.5 overflow-x-auto pb-1">
                 <button onClick={() => setFilterCat('semua')} className={`shrink-0 text-[11px] px-3 py-1.5 rounded-full border font-semibold ${filterCat === 'semua' ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500'}`}>Semua</button>
-                {CATEGORIES.map((c) => {
+                {cats.map((c) => {
                   const CI = c.Icon
                   return (
                     <button key={c.id} onClick={() => setFilterCat(filterCat === c.id ? 'semua' : c.id)} className={`shrink-0 text-[11px] px-3 py-1.5 rounded-full border font-semibold flex items-center gap-1 ${filterCat === c.id ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-500'}`}>
@@ -825,6 +962,49 @@ export default function App() {
               </div>
             </section>
 
+            {/* Vs bulan lalu */}
+            <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
+              <p className="font-semibold text-sm text-slate-900">Vs bulan lalu</p>
+              <div className="flex items-end justify-between mt-1 gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-slate-400">Bulan lalu</p>
+                  <p className="font-extrabold text-slate-600 truncate">{formatRp(prevTotal)}</p>
+                </div>
+                {prevTotal > 0 && totalViewed > 0 ? (
+                  <span className={`shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 ${totalViewed >= prevTotal ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-700'}`}>
+                    {totalViewed >= prevTotal ? '+' : '−'}{Math.abs(Math.round(((totalViewed - prevTotal) / prevTotal) * 100))}%
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1 bg-slate-100 text-slate-400">—</span>
+                )}
+                <div className="min-w-0 text-right">
+                  <p className="text-[11px] text-slate-400">Bulan ini</p>
+                  <p className="font-extrabold text-blue-700 truncate">{formatRp(totalViewed)}</p>
+                </div>
+              </div>
+              {movers.length > 0 ? (
+                <ul className="mt-2.5 space-y-1.5">
+                  {movers.map((m) => {
+                    const MI = m.Icon
+                    const up = m.diff > 0
+                    return (
+                      <li key={m.id} className="flex items-center gap-2 text-xs">
+                        <span className="w-7 h-7 rounded-xl grid place-items-center shrink-0" style={{ background: m.color + '14', color: m.color }}>
+                          <MI size={14} />
+                        </span>
+                        <span className="flex-1 font-semibold text-slate-700 truncate">{m.name}</span>
+                        <span className={`font-bold ${up ? 'text-red-600' : 'text-blue-700'}`}>
+                          {up ? '+' : '−'}{formatRp(Math.abs(m.diff))}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-slate-400 mt-2">Belum ada data pembanding.</p>
+              )}
+            </section>
+
             <section className="bg-white rounded-3xl p-4 border border-blue-100 shadow-sm">
               <div className="flex justify-between items-center mb-1">
                 <p className="font-semibold text-sm text-slate-900">Analytics</p>
@@ -864,7 +1044,7 @@ export default function App() {
 
             <section className="space-y-2">
               <p className="font-semibold text-sm text-slate-900">Budget per kategori</p>
-              {CATEGORIES.map((c) => {
+              {cats.map((c) => {
                 const CI = c.Icon
                 const total = viewed.filter((e) => e.categoryId === c.id).reduce((s, e) => s + e.amount, 0)
                 const limit = catBudgets[c.id] ?? 0
@@ -889,6 +1069,67 @@ export default function App() {
                     ) : (
                       <p className="text-[11px] text-slate-400 mt-1">Belum ada limit.</p>
                     )}
+                  </div>
+                )
+              })}
+            </section>
+
+            {/* Kategori saya (custom) */}
+            <section className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-semibold text-sm text-slate-900">Kategori saya</p>
+                  <p className="text-[11px] text-slate-400">Bikin sendiri misal: Parkir, Langganan, Kosmetik.</p>
+                </div>
+                <button onClick={() => setShowCatForm((v) => !v)} className="text-[11px] bg-blue-600 text-white font-bold rounded-full px-3 py-1.5 shrink-0">
+                  {showCatForm ? 'Tutup' : '+ Buat'}
+                </button>
+              </div>
+              {showCatForm && (
+                <div className="bg-white border border-blue-100 shadow-sm rounded-2xl p-3 space-y-2.5">
+                  <input value={ncName} onChange={(e) => setNcName(e.target.value)} maxLength={20} placeholder="Nama kategori" className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 font-semibold" />
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-1">IKON</p>
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {Object.entries(CUSTOM_ICONS).map(([key, II]) => (
+                        <button key={key} onClick={() => setNcIcon(key)} className={`shrink-0 w-10 h-10 grid place-items-center rounded-xl border ${ncIcon === key ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-400'}`}>
+                          <II size={17} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-1">WARNA</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {CUSTOM_COLORS.map((col) => (
+                        <button
+                          key={col}
+                          onClick={() => setNcColor(col)}
+                          aria-label={col}
+                          className={`w-8 h-8 rounded-full ${ncColor === col ? 'ring-2 ring-offset-2 ring-blue-600' : ''}`}
+                          style={{ background: col }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={saveCustomCat} className="w-full bg-blue-600 text-white text-sm font-bold rounded-xl py-2.5">Simpan kategori</button>
+                </div>
+              )}
+              {customCats.map((c) => {
+                const CI = CUSTOM_ICONS[c.iconKey] ?? Package
+                const used = all.filter((e) => e.categoryId === c.id).length
+                return (
+                  <div key={c.id} className="bg-white border border-blue-100 shadow-sm rounded-2xl p-3 flex items-center gap-2">
+                    <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: c.color + '14', color: c.color }}>
+                      <CI size={16} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-slate-900 truncate">{c.name}</p>
+                      <p className="text-[11px] text-slate-400">{used} transaksi</p>
+                    </div>
+                    <button onClick={() => deleteCustomCat(c.id, c.name)} className="text-slate-400 p-1" aria-label="hapus kategori">
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 )
               })}
@@ -949,7 +1190,7 @@ export default function App() {
                     <input value={rDay} onChange={(e) => setRDay(e.target.value)} inputMode="numeric" placeholder="tgl" className="w-20 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500" />
                   </div>
                   <div className="flex gap-1.5 overflow-x-auto pb-1">
-                    {CATEGORIES.map((c) => {
+                    {cats.map((c) => {
                       const CI = c.Icon
                       return <button key={c.id} onClick={() => setRCat(c.id)} className={`shrink-0 w-9 h-9 grid place-items-center rounded-xl border ${rCat === c.id ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-400'}`}><CI size={15} /></button>
                     })}
@@ -985,12 +1226,27 @@ export default function App() {
               <button onClick={exportExcelFile} className="bg-blue-600 text-white rounded-2xl py-3 text-sm font-bold flex items-center justify-center gap-1.5"><Download size={15} /> Excel</button>
               <button onClick={resetAll} className="bg-white text-red-600 border border-red-200 rounded-2xl py-3 text-sm font-semibold">Hapus semua</button>
             </section>
+
+            {/* Cadangan data */}
+            <section className="bg-white border border-blue-100 shadow-sm rounded-3xl p-4 space-y-2">
+              <p className="font-semibold text-sm text-slate-900">Cadangan data</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Semua data cuma tersimpan di HP ini. Backup berkala — kalau HP hilang atau data Safari kehapus, semua ikut hilang.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={doBackup} className="bg-slate-900 text-white rounded-2xl py-3 text-sm font-bold">Backup</button>
+                <button onClick={() => restoreRef.current?.click()} className="bg-white text-slate-900 border border-slate-200 rounded-2xl py-3 text-sm font-bold">Restore</button>
+              </div>
+              <input ref={restoreRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { doRestore(e.target.files?.[0]); e.target.value = '' }} />
+              {backupMsg && <p className="text-[11px] font-semibold text-blue-700 bg-blue-50 rounded-xl px-3 py-2">{backupMsg}</p>}
+            </section>
           </div>
         )}
       </main>
 
       {showScan && (
         <ScanSheet
+          categories={cats}
           onClose={() => setShowScan(false)}
           onUse={(d) => {
             const dt = d.date || todayStr()
@@ -998,6 +1254,7 @@ export default function App() {
             setCatId(d.categoryId)
             setDate(dt)
             setNote(d.note)
+            setPhoto(d.photo)
             setViewMonth(dt.slice(0, 7))
             setSelectedDay(undefined)
             scanJustUsed.current = true
@@ -1084,7 +1341,7 @@ export default function App() {
             </div>
             <label className="text-[11px] font-semibold text-slate-400">KATEGORI</label>
             <div className="grid grid-cols-5 gap-2 mt-1 mb-3">
-              {CATEGORIES.map((c) => {
+              {cats.map((c) => {
                 const CI = c.Icon
                 const active = catId === c.id
                 return (
@@ -1110,6 +1367,19 @@ export default function App() {
                 <input placeholder="Catatan: bakso" value={note} onChange={(e) => setNote(e.target.value)} className="w-full mt-2 border border-slate-200 rounded-xl px-3 py-2 bg-transparent text-sm" />
               </div>
             </div>
+            <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { attachPhoto(e.target.files?.[0]); e.target.value = '' }} />
+            {photo ? (
+              <div className="relative mb-3">
+                <img src={photo} alt="Bukti" className="w-full max-h-44 object-cover rounded-2xl border border-slate-200" />
+                <button onClick={() => setPhoto(undefined)} className="absolute top-2 right-2 text-[11px] font-bold bg-slate-900/70 text-white rounded-full px-3 py-1.5">
+                  Hapus foto
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => photoRef.current?.click()} className="w-full mb-3 border border-dashed border-blue-200 text-blue-700 text-sm font-semibold rounded-2xl py-2.5 flex items-center justify-center gap-1.5">
+                <Camera size={15} /> Lampirkan foto struk (opsional)
+              </button>
+            )}
             <button onClick={saveExpense} className="w-full bg-blue-600 text-white font-bold rounded-2xl py-3.5 text-[15px]">{editingExpense ? 'Simpan perubahan' : `Simpan • ${formatRp(parseAmount(amountRaw))}`}</button>
             {editingExpense && (
               <button onClick={duplicateExpense} className="w-full mt-2 bg-blue-50 text-blue-700 font-bold rounded-2xl py-3 text-sm">Duplikat buat hari ini</button>
