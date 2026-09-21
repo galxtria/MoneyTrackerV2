@@ -142,7 +142,13 @@ export default function App() {
   const dayOfMonth = now.getDate()
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const avg = dayOfMonth > 0 ? Math.round(totalMonth / dayOfMonth) : 0
-  const sisaHarian = budget > 0 ? Math.max(0, Math.floor(sisa / Math.max(1, daysInMonth - dayOfMonth + 1))) : 0
+  // Jatah harian akurat: sisa dikurangi rutin yang belum dibayar, dibagi sisa hari
+  const rutinUnpaid = recurrings.filter((r) => r.active && r.lastPaidMonth !== mkNow).reduce((s, r) => s + r.amount, 0)
+  const remainingDays = Math.max(1, daysInMonth - dayOfMonth + 1)
+  const sisaSetelahRutin = Math.max(0, sisa - rutinUnpaid)
+  const sisaHarian = budget > 0 ? Math.floor(sisaSetelahRutin / remainingDays) : 0
+  // Boleh keluar hari ini = jatah hari ini dikurangi yang sudah keluar hari ini
+  const todayAllowance = budget > 0 ? Math.max(0, sisaHarian - totalToday) : 0
 
   const homeDaily: Record<string, number> = useMemo(() => {
     const m: Record<string, number> = {}
@@ -487,6 +493,28 @@ export default function App() {
               )}
               </div>
             </section>
+
+            {/* Boleh keluar hari ini (akurat) */}
+            {budget > 0 && (
+              <section className="relative overflow-hidden rounded-[28px] p-5 text-white shadow-lg shadow-blue-200 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
+                <div className="pointer-events-none absolute -top-14 -left-14 w-40 h-40 rounded-full bg-white/10" />
+                <div className="pointer-events-none absolute -bottom-16 -right-12 w-44 h-44 rounded-full bg-blue-300/20" />
+                <div className="relative flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-blue-100 tracking-widest">BOLEH KELUAR HARI INI</p>
+                    <p className="text-3xl font-extrabold tracking-tight">{formatRp(todayAllowance)}</p>
+                  </div>
+                  <span className="w-12 h-12 rounded-2xl bg-white/15 grid place-items-center shrink-0">
+                    <Wallet size={22} />
+                  </span>
+                </div>
+                <div className="relative mt-3 bg-white/10 rounded-2xl px-3 py-2">
+                  <p className="text-[11px] text-blue-50 leading-relaxed">
+                    (Sisa {formatRp(Math.max(0, sisa))} − rutin {formatRp(rutinUnpaid)}) ÷ {remainingDays} hari − keluar hari ini {formatRp(totalToday)}
+                  </p>
+                </div>
+              </section>
+            )}
 
             {/* Total keluar harian & bulanan */}
             <section className="grid grid-cols-2 gap-3">
