@@ -20,7 +20,6 @@ import {
   TrendingDown,
   TrendingUp,
   TriangleAlert,
-  User,
   Wallet,
 } from 'lucide-react'
 import { Bar, BarChart, Cell, LabelList, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -474,7 +473,6 @@ export default function App() {
     await refresh()
   }
 
-  const titles: Record<Tab, string> = { home: 'Home', expenses: 'Expenses', stats: 'Total Expense', goals: 'Goals & Rutin' }
   const [vy, vm] = viewMonth.split('-').map(Number)
   const viewLabel = new Date(vy, vm - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
 
@@ -483,15 +481,13 @@ export default function App() {
   return (
     <div className="min-h-dvh max-w-md mx-auto bg-slate-100 flex flex-col">
       {/* Header ala mockup */}
-      <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pt-6 pb-2 flex items-center gap-3">
-        <span className="w-9 h-9 rounded-full bg-blue-600 text-white grid place-items-center">
-          <User size={18} />
+      <header className="sticky top-0 z-10 bg-slate-100/90 backdrop-blur px-5 pt-3 pb-2 flex items-center gap-2.5">
+        <img src="/logo.svg" alt="Logo MoneyTracker" className="w-8 h-8 rounded-xl shadow-sm shrink-0" />
+        <p className="flex-1 font-bold text-[15px] text-slate-900 truncate">MoneyTracker</p>
+        <span className="text-[11px] font-bold text-blue-700 bg-white border border-blue-100 rounded-full pl-2 pr-2.5 py-1 capitalize shrink-0 flex items-center gap-1">
+          <CalendarDays size={12} />
+          {new Date(vy, vm - 1, 1).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
         </span>
-        <h1 className="flex-1 text-center font-bold text-slate-900">{titles[tab]}</h1>
-        <button onClick={() => setTab('goals')} className="relative w-9 h-9 rounded-full bg-white border border-blue-100 grid place-items-center text-slate-600" aria-label="notifikasi">
-          <Bell size={17} />
-          {dueRutin.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-600" />}
-        </button>
       </header>
 
       <main className="flex-1 px-5 py-3 pb-32">

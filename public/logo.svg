@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="pgrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#pgrad)"/>
+  <!-- koin -->
+  <circle cx="43" cy="15" r="9" fill="#FCD34A"/>
+  <circle cx="43" cy="15" r="9" fill="none" stroke="#F59E0B" stroke-width="1.5"/>
+  <text x="43" y="18.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8.5" font-weight="800" fill="#92400E">Rp</text>
+  <!-- kaki -->
+  <rect x="21" y="46" width="7" height="8" rx="3" fill="#FFFFFF"/>
+  <rect x="35" y="46" width="7" height="8" rx="3" fill="#FFFFFF"/>
+  <!-- ekor -->
+  <path d="M47 36 q6 0 4 6" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- badan -->
+  <ellipse cx="30" cy="38" rx="17" ry="13" fill="#FFFFFF"/>
+  <!-- telinga -->
+  <path d="M23 27 L26 18 L33 25 Z" fill="#FFFFFF"/>
+  <!-- moncong -->
+  <ellipse cx="14.5" cy="38" rx="5.5" ry="5" fill="#DBEAFE"/>
+  <circle cx="13" cy="38" r="1" fill="#1D4ED8"/>
+  <circle cx="16.5" cy="38" r="1" fill="#1D4ED8"/>
+  <!-- mata -->
+  <circle cx="23" cy="33" r="2" fill="#1D4ED8"/>
+  <!-- pipi -->
+  <circle cx="28" cy="41" r="2.5" fill="#BFDBFE" opacity="0.8"/>
+  <!-- slot koin -->
+  <rect x="36" y="25.5" width="11" height="3" rx="1.5" fill="#1D4ED8"/>
+</svg>
