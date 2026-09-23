@@ -1,7 +1,7 @@
-# MoneyTrackerV2 — Catat Pengeluaran Offline (PWA for iPhone)
+# MoneyTrackerV2 — Catat Pengeluaran Offline
 
 Aplikasi khusus **pengeluaran saja** (pemasukan lihat di m-banking).
-100% offline, tanpa login, bisa di-install di iPhone via Safari.
+100% offline, tanpa login.
 
 ## Tech stack
 - Vite + React + TypeScript
